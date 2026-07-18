@@ -763,8 +763,6 @@
 
     if(!moved) return false;
 
-    busy = true;
-
     // update DOM for surviving/merged tiles first (slide + pop)
     tiles.forEach(t => {
       if(removedIds.has(t.id)) return;
@@ -787,14 +785,11 @@
     renderScores();
     if(scoreGain > 0) bumpScore();
 
-    setTimeout(() => {
-      spawnRandomTile();
-      if(!hasAnyValidMove()){
-        showGameOver();
-      }
-      busy = false;
-      saveState();
-    }, 140);
+    spawnRandomTile();
+    if(!hasAnyValidMove()){
+      showGameOver();
+    }
+    saveState();
 
     return true;
   }
@@ -826,7 +821,7 @@
     const dir = KEY_DIR[e.key];
     if(!dir) return;
     e.preventDefault();
-    if(gameOver){ newGame(); return; }
+    if(gameOver) return;
     const ok = doMove(dir);
     if(!ok) shakeBoard();
   }, {passive:false});
@@ -846,7 +841,7 @@
       if(gameOver) newGame();
       return;
     }
-    if(gameOver){ newGame(); return; }
+    if(gameOver) return;
     let dir;
     if(Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
     else dir = dy > 0 ? 'down' : 'up';
