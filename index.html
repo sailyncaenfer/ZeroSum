@@ -389,9 +389,7 @@
       <div class="overlay" id="overlay"></div>
     </div>
 
-    <button class="restart-btn" id="restartBtn">
-      Restart <span class="key-hint">R</span>
-    </button>
+    <button class="restart-btn" id="restartBtn">Restart</button>
 
   </div>
 
@@ -412,7 +410,7 @@
       <p>So a small tile can combine with almost anything nearby, while two big tiles only merge if they perfectly cancel out.</p>
 
       <h3>Scoring</h3>
-      <p>Merges that don't cancel out just combine into a new tile carrying the sum &mdash; no points for those. The real reward is a <b>zero-sum merge</b>: when two tiles sum to exactly 0, they both vanish and you score 10 &times; their absolute value.</p>
+      <p>A <b>zero-sum merge</b> is the big reward: when two tiles sum to exactly 0, they both vanish and you score 10 &times; their absolute value. Merges that don't cancel out still combine into a new tile carrying the sum, and now score points too &mdash; equal to the smaller of the two tiles' absolute values. For example, merging &minus;3 and 8 scores 3 points, and merging 2 and &minus;10 scores 2 points.</p>
 
       <h3>New Tiles &amp; Game Over</h3>
       <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a tile to merge. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
@@ -743,6 +741,7 @@
             removedIds.add(b.id);
             lineTiles[i] = null;
           } else {
+            scoreGain += Math.min(Math.abs(a.value), Math.abs(b.value));
             a.value = sum;
             mergedIds.add(a.id);
             removedIds.add(b.id);
