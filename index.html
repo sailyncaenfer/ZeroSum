@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ZEROSUM</title>
+<style>
+  :root{
+    --bg: #121213;
+    --panel: #1c1c1e;
+    --board: #232326;
+    --cell: #2c2c30;
+    --accent: #e8a33d;
+    --accent-dim: #8a672a;
+    --pos-bg: #0a0a0a;
+    --pos-fg: #f5f5f5;
+    --neg-bg: #f5f5f5;
+    --neg-fg: #0a0a0a;
+    --muted: #77777c;
+    --gap: 1.6vmin;
+    --cellsize: 18vmin;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh;
+    touch-action: none;
+    user-select: none;
+  }
+  .app{
+    width: min(94vmin, 480px);
+    padding: 3vmin 2vmin 4vmin;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 2.4vmin;
+  }
+
+  /* ---------- Header ---------- */
+  .header{
+    width:100%;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+  }
+  .title{
+    font-size: 9vmin;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.85;
+    position:relative;
+  }
+  .title .zero{
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.14vmin #3a3a3a;
+    text-stroke: 0.14vmin #3a3a3a;
+  }
+  .title .sum{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.14vmin #cfcfcf;
+    text-stroke: 0.14vmin #cfcfcf;
+  }
+  .title-sub{
+    font-size: 1.7vmin;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.6vmin;
+    font-weight: 600;
+  }
+  .scores{
+    display:flex;
+    gap: 1.4vmin;
+  }
+  .score-box{
+    background: var(--panel);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin 2.4vmin;
+    text-align:center;
+    min-width: 15vmin;
+  }
+  .score-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .score-value{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 3vmin;
+    font-weight: 700;
+    color: #f2f2f2;
+    font-variant-numeric: tabular-nums;
+  }
+  .score-value.bump{
+    animation: bump 0.32s ease;
+  }
+  @keyframes bump{
+    0%{ transform: scale(1); color: #f2f2f2; }
+    35%{ transform: scale(1.28); color: var(--accent); }
+    100%{ transform: scale(1); color: #f2f2f2; }
+  }
+
+  /* ---------- Board ---------- */
+  .board-wrap{
+    position:relative;
+  }
+  .board{
+    position:relative;
+    width: calc(4 * var(--cellsize) + 5 * var(--gap));
+    height: calc(4 * var(--cellsize) + 5 * var(--gap));
+    background: var(--board);
+    border-radius: 2vmin;
+    padding: var(--gap);
+  }
+  .cell-bg{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    background: var(--cell);
+    border-radius: 1.4vmin;
+  }
+  .tile{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    border-radius: 1.4vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 6.4vmin;
+    transition: left 0.13s cubic-bezier(.4,0,.2,1), top 0.13s cubic-bezier(.4,0,.2,1);
+    will-change: left, top, transform;
+    z-index: 2;
+  }
+  .tile.pos{
+    background: var(--pos-bg);
+    color: var(--pos-fg);
+    box-shadow: 0 0 0 1px #2b2b2b inset;
+  }
+  .tile.neg{
+    background: var(--neg-bg);
+    color: var(--neg-fg);
+    box-shadow: 0 0 0 1px #d6d6d6 inset;
+  }
+  .tile.small-text{ font-size: 5.2vmin; }
+  .tile.spawn{
+    animation: spawn 0.22s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  @keyframes spawn{
+    0%{ transform: scale(0); opacity:0; }
+    70%{ transform: scale(1.15); opacity:1; }
+    100%{ transform: scale(1); }
+  }
+  .tile.merge-pop{
+    animation: mergepop 0.22s ease 0.11s both;
+    z-index: 3;
+  }
+  @keyframes mergepop{
+    0%{ transform: scale(1); }
+    45%{ transform: scale(1.22); }
+    100%{ transform: scale(1); }
+  }
+  .tile.vanish{
+    animation: vanish 0.22s ease both;
+    z-index: 3;
+  }
+  @keyframes vanish{
+    0%{ transform: scale(1) rotate(0deg); opacity:1; }
+    100%{ transform: scale(0) rotate(25deg); opacity:0; }
+  }
+  .tile.shake{
+    animation: shake 0.28s ease;
+  }
+  @keyframes shake{
+    0%,100%{ transform: translateX(0); }
+    25%{ transform: translateX(-1.2vmin); }
+    75%{ transform: translateX(1.2vmin); }
+  }
+
+  /* ---------- Restart button ---------- */
+  .restart-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 1vmin;
+    background: var(--panel);
+    color: #d8d8d8;
+    border: none;
+    border-radius: 1.4vmin;
+    padding: 1.4vmin 3.4vmin;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1.9vmin;
+    letter-spacing: 0.04em;
+    cursor:pointer;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, transform 0.1s ease;
+  }
+  .restart-btn:hover{
+    color: var(--accent);
+  }
+  .restart-btn:active{
+    transform: scale(0.96);
+  }
+  .restart-btn .key-hint{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 2.6vmin;
+    height: 2.6vmin;
+    padding: 0 0.6vmin;
+    border-radius: 0.7vmin;
+    background: var(--cell);
+    color: var(--muted);
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 1.5vmin;
+    font-weight: 800;
+  }
+
+  /* ---------- Game over flash (no text, just a red pulse) ---------- */
+  .overlay{
+    position:absolute;
+    inset:0;
+    border-radius: 2vmin;
+    pointer-events:none;
+    background: rgba(220,40,40,0);
+    z-index: 10;
+  }
+  .overlay.flash{
+    animation: gameOverPulse 1s ease-out forwards;
+  }
+  @keyframes gameOverPulse{
+    0%{ background: rgba(220,40,40,0.6); }
+    100%{ background: rgba(220,40,40,0); }
+  }
+
+  /* ---------- Help button ---------- */
+  .help-btn{
+    width: 5.2vmin;
+    height: 5.2vmin;
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    border: none;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 2.6vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    flex-shrink: 0;
+    align-self: center;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .help-btn:active{
+    transform: scale(0.92);
+  }
+  .help-btn:hover{
+    color: var(--accent);
+  }
+
+  /* ---------- Help modal ---------- */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 4vmin;
+    z-index: 100;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity 0.18s ease;
+  }
+  .modal-overlay.open{
+    opacity:1;
+    pointer-events:auto;
+  }
+  .modal{
+    background: var(--panel);
+    border-radius: 2.4vmin;
+    width: min(100%, 460px);
+    max-height: 82vh;
+    overflow-y: auto;
+    padding: 3.6vmin 3.4vmin;
+    transform: translateY(1.2vmin) scale(0.98);
+    transition: transform 0.18s ease;
+  }
+  .modal-overlay.open .modal{
+    transform: translateY(0) scale(1);
+  }
+  .modal h2{
+    margin: 0 0 2vmin;
+    font-size: 3vmin;
+    color: #f2f2f2;
+  }
+  .modal h3{
+    font-size: 1.9vmin;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 2.4vmin 0 0.8vmin;
+  }
+  .modal p, .modal li{
+    font-size: 1.9vmin;
+    line-height: 1.5;
+    color: #cfcfcf;
+    margin: 0.6vmin 0;
+  }
+  .modal ul{
+    margin: 0.6vmin 0;
+    padding-left: 3.4vmin;
+  }
+  .modal .swatch{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 3.2vmin;
+    height: 3.2vmin;
+    padding: 0 0.6vmin;
+    border-radius: 0.8vmin;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 1.7vmin;
+    vertical-align: middle;
+  }
+  .modal .swatch.pos{ background: var(--pos-bg); color: var(--pos-fg); box-shadow: 0 0 0 1px #2b2b2b inset; }
+  .modal .swatch.neg{ background: var(--neg-bg); color: var(--neg-fg); box-shadow: 0 0 0 1px #d6d6d6 inset; }
+  .modal-close{
+    margin-top: 3vmin;
+    width: 100%;
+    padding: 1.6vmin;
+    border: none;
+    border-radius: 1.2vmin;
+    background: var(--accent);
+    color: #1a1206;
+    font-weight: 800;
+    font-size: 1.9vmin;
+    cursor:pointer;
+  }
+
+  .footer-hint{
+    color: var(--muted);
+    font-size: 1.6vmin;
+    letter-spacing: 0.06em;
+    text-align:center;
+  }
+  .footer-hint b{ color:#bbb; }
+
+  @media (prefers-reduced-motion: reduce){
+    .tile, .overlay, .overlay-inner, .score-value{ transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="title"><span class="zero">Zero</span><span class="sum">Sum</span></div>
+      <div class="scores">
+        <div class="score-box">
+          <div class="score-label">Score</div>
+          <div class="score-value" id="score">0</div>
+        </div>
+        <div class="score-box">
+          <div class="score-label">Best</div>
+          <div class="score-value" id="best">0</div>
+        </div>
+        <button class="help-btn" id="helpBtn" aria-label="How to play">?</button>
+      </div>
+    </div>
+
+<div class="board-wrap">
+      <div class="board" id="board"></div>
+      <div class="overlay" id="overlay"></div>
+    </div>
+
+    <button class="restart-btn" id="restartBtn"> Restart </button>
+
+  </div>
+
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <h2>How ZeroSum Works</h2>
+      <p>Swipe (or use arrow keys / WASD) to slide every tile in one direction. Tiles glide until they hit the edge of the 4&times;4 board or another tile.</p>
+
+      <h3>Tiles</h3>
+      <p><span class="swatch pos">5</span> Black tiles hold <b>positive</b> numbers. <span class="swatch neg">5</span> White tiles hold <b>negative</b> numbers. Every tile is drawn from a shuffled deck of the values &minus;10 through 10 (0 is never dealt on its own), so you'll always see a mix of both colors.</p>
+
+      <h3>Merging</h3>
+      <p>When a move pushes two tiles together, they merge only if <b>both</b> of these are true:</p>
+      <ul>
+        <li>Their values add up to something between &minus;10 and 10.</li>
+        <li>Either one of the two tiles has an absolute value of 3 or less, <b>or</b> the two values are exact opposites (they sum to zero).</li>
+      </ul>
+      <p>So a small tile can combine with almost anything nearby, while two big tiles only merge if they perfectly cancel out.</p>
+
+      <h3>Scoring</h3>
+      <p>Merges that don't cancel out just combine into a new tile carrying the sum &mdash; no points for those. The real reward is a <b>zero-sum merge</b>: when two tiles sum to exactly 0, they both vanish and you score 10 &times; their absolute value.</p>
+
+      <h3>New Tiles &amp; Game Over</h3>
+      <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a tile to merge. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
+
+      <button class="modal-close" id="closeHelp">Got it</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  const SIZE = 4;
+  const CELL_PLUS_GAP_STYLE = () => {};
+  let tileIdCounter = 1;
+
+  // ---------------- 20-bag system ----------------
+  let bag = [];
+  function refillBag(){
+    bag = [];
+    for(let v=-10; v<=10; v++){ if(v!==0) bag.push(v); }
+    for(let i=bag.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [bag[i],bag[j]] = [bag[j],bag[i]];
+    }
+  }
+  function drawValue(){
+    if(bag.length===0) refillBag();
+    return bag.pop();
+  }
+  function drawValueWithSign(wantPositive){
+    const skipped = [];
+    let value;
+    while(true){
+      if(bag.length===0) refillBag();
+      const v = bag.pop();
+      if((v > 0) === wantPositive){ value = v; break; }
+      skipped.push(v);
+    }
+    bag.push(...skipped);
+    return value;
+  }
+
+  // ---------------- state ----------------
+  let tiles = [];   // {id, value, r, c, el}
+  let score = 0;
+  let best = 0;
+  let busy = false;
+  try{ best = parseInt(localStorage.getItem('zerosum_best')||'0',10) || 0; }catch(e){ best = 0; }
+
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlayEl = document.getElementById('overlay');
+  let gameOver = false;
+
+  function occupied(r,c){
+    return tiles.find(t => t.r===r && t.c===c);
+  }
+
+  function emptyCells(){
+    const list = [];
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      if(!occupied(r,c)) list.push({r,c});
+    }
+    return list;
+  }
+
+  function canMerge(a,b){
+    const sum = a + b;
+    const sumInRange = Math.abs(sum) <= 10;      // hard cap, never overridden
+    const oneSmall = Math.abs(a) <= 3 || Math.abs(b) <= 3;
+    const zeroSum = sum === 0;
+    return sumInRange && (oneSmall || zeroSum);
+  }
+
+  // ---------------- board rendering ----------------
+  function cellPixel(){
+    // read computed cell size + gap in px for precise placement
+    const rootStyles = getComputedStyle(document.documentElement);
+    const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+    const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
+    const gap = parseFloat(rootStyles.getPropertyValue('--gap')) * vmin;
+    return {cell, gap};
+  }
+
+  function positionEl(el, r, c){
+    const {cell, gap} = cellPixel();
+    const left = gap + c * (cell + gap);
+    const top = gap + r * (cell + gap);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  }
+
+  function buildCellBackgrounds(){
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const bg = document.createElement('div');
+      bg.className = 'cell-bg';
+      positionEl(bg, r, c);
+      bg.dataset.bg = '1';
+      boardEl.appendChild(bg);
+    }
+  }
+
+  function fontSizeClassFor(value){
+    return '';
+  }
+
+  function createTileEl(tile){
+    const el = document.createElement('div');
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + ' spawn ' + fontSizeClassFor(tile.value);
+    el.textContent = Math.abs(tile.value);
+    positionEl(el, tile.r, tile.c);
+    boardEl.appendChild(el);
+    tile.el = el;
+    el.addEventListener('animationend', () => {
+      el.classList.remove('spawn');
+    }, {once:true});
+    return el;
+  }
+
+  function updateTileEl(tile){
+    const el = tile.el;
+    el.textContent = Math.abs(tile.value);
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + ' ' + fontSizeClassFor(tile.value);
+    positionEl(el, tile.r, tile.c);
+  }
+
+  function removeTileEl(tile, animate){
+    const el = tile.el;
+    if(!el) return;
+    if(animate){
+      el.classList.add('vanish');
+      el.addEventListener('animationend', () => { el.remove(); }, {once:true});
+    } else {
+      el.remove();
+    }
+  }
+
+  function renderScores(){
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+  }
+
+  function bumpScore(){
+    scoreEl.classList.remove('bump');
+    void scoreEl.offsetWidth;
+    scoreEl.classList.add('bump');
+  }
+
+  // ---------------- init ----------------
+  function newGame(){
+    boardEl.innerHTML = '';
+    tiles = [];
+    score = 0;
+    busy = false;
+    gameOver = false;
+    overlayEl.classList.remove('flash');
+    refillBag();
+    buildCellBackgrounds();
+
+    const empties = emptyCells();
+    const signs = [true, true, true, true, false, false, false, false];
+    for(let i=signs.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [signs[i],signs[j]] = [signs[j],signs[i]];
+    }
+    for(let i=0;i<8;i++){
+      const idx = Math.floor(Math.random()*empties.length);
+      const spot = empties.splice(idx,1)[0];
+      const tile = { id: tileIdCounter++, value: drawValueWithSign(signs[i]), r: spot.r, c: spot.c, el:null };
+      tiles.push(tile);
+      createTileEl(tile);
+    }
+    renderScores();
+  }
+
+  function spawnRandomTile(){
+    const empties = emptyCells();
+    if(empties.length===0) return;
+    const spot = empties[Math.floor(Math.random()*empties.length)];
+    const tile = { id: tileIdCounter++, value: drawValue(), r: spot.r, c: spot.c, el:null };
+    tiles.push(tile);
+    createTileEl(tile);
+  }
+
+  // ---------------- line helpers ----------------
+  function getLineCoords(dir){
+    // returns array of 4 lines, each line = array of {r,c} ordered edge-first
+    const lines = [];
+    if(dir==='left'){
+      for(let r=0;r<SIZE;r++){
+        const line=[]; for(let c=0;c<SIZE;c++) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='right'){
+      for(let r=0;r<SIZE;r++){
+        const line=[]; for(let c=SIZE-1;c>=0;c--) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='up'){
+      for(let c=0;c<SIZE;c++){
+        const line=[]; for(let r=0;r<SIZE;r++) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='down'){
+      for(let c=0;c<SIZE;c++){
+        const line=[]; for(let r=SIZE-1;r>=0;r--) line.push({r,c}); lines.push(line);
+      }
+    }
+    return lines;
+  }
+
+  // Pure simulation on values only, for game-over detection
+  function simulateMoved(values, dir){
+    // values: length-16 array (r*4+c), null or number
+    const lines = getLineCoords(dir);
+    let moved = false;
+    for(const line of lines){
+      const arr = line.map(p => values[p.r*SIZE+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]===null || arr[i+1]===undefined) continue;
+        if(arr[i]===null || arr[i]===undefined){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i] && canMerge(arr[i], arr[i+1])){
+          const sum = arr[i]+arr[i+1];
+          arr[i] = (sum===0) ? null : sum;
+          arr[i+1] = null;
+          mergedInto[i] = true;
+          moved = true;
+        }
+      }
+    }
+    return moved;
+  }
+
+  function boardValues(){
+    const values = new Array(SIZE*SIZE).fill(null);
+    tiles.forEach(t => { values[t.r*SIZE+t.c] = t.value; });
+    return values;
+  }
+
+  function hasAnyValidMove(){
+    const values = boardValues();
+    return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
+  }
+
+  // ---------------- real move (with tile objects) ----------------
+  function doMove(dir){
+    if(busy) return;
+    const lines = getLineCoords(dir);
+    let moved = false;
+    let scoreGain = 0;
+    const removedIds = new Set();
+    const mergedIds = new Set();
+
+    for(const line of lines){
+      const lineTiles = line.map(p => occupied(p.r, p.c) || null);
+      const mergedInto = new Array(lineTiles.length).fill(false);
+
+      for(let i=0;i<lineTiles.length-1;i++){
+        if(!lineTiles[i+1]) continue;
+        if(!lineTiles[i]){
+          lineTiles[i] = lineTiles[i+1];
+          lineTiles[i+1] = null;
+          moved = true;
+        } else if(!mergedInto[i] && canMerge(lineTiles[i].value, lineTiles[i+1].value)){
+          const a = lineTiles[i], b = lineTiles[i+1];
+          const sum = a.value + b.value;
+          if(sum === 0){
+            scoreGain += Math.abs(a.value) * 10;
+            removedIds.add(a.id);
+            removedIds.add(b.id);
+            lineTiles[i] = null;
+          } else {
+            a.value = sum;
+            mergedIds.add(a.id);
+            removedIds.add(b.id);
+            lineTiles[i] = a;
+          }
+          lineTiles[i+1] = null;
+          mergedInto[i] = true;
+          moved = true;
+        }
+      }
+
+      // write back positions
+      for(let idx=0; idx<line.length; idx++){
+        const pos = line[idx];
+        const t = lineTiles[idx];
+        if(t){ t.r = pos.r; t.c = pos.c; }
+      }
+    }
+
+    if(!moved) return false;
+
+    busy = true;
+
+    // update DOM for surviving/merged tiles first (slide + pop)
+    tiles.forEach(t => {
+      if(removedIds.has(t.id)) return;
+      updateTileEl(t);
+      if(mergedIds.has(t.id)){
+        t.el.classList.remove('merge-pop');
+        void t.el.offsetWidth;
+        t.el.classList.add('merge-pop');
+      }
+    });
+
+    // animate out removed tiles, then clean up
+    tiles.forEach(t => {
+      if(removedIds.has(t.id)) removeTileEl(t, true);
+    });
+    tiles = tiles.filter(t => !removedIds.has(t.id));
+
+    score += scoreGain;
+    if(score > best){ best = score; try{ localStorage.setItem('zerosum_best', String(best)); }catch(e){} }
+    renderScores();
+    if(scoreGain > 0) bumpScore();
+
+    setTimeout(() => {
+      spawnRandomTile();
+      if(!hasAnyValidMove()){
+        showGameOver();
+      }
+      busy = false;
+    }, 140);
+
+    return true;
+  }
+
+  function showGameOver(){
+    gameOver = true;
+    overlayEl.classList.remove('flash');
+    void overlayEl.offsetWidth;
+    overlayEl.classList.add('flash');
+  }
+
+  function shakeBoard(){
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth;
+    boardEl.classList.add('shake');
+  }
+
+  // ---------------- input ----------------
+  const KEY_DIR = {
+    ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+    a:'left', d:'right', w:'up', s:'down'
+  };
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'r' || e.key === 'R'){
+      e.preventDefault();
+      newGame();
+      return;
+    }
+    const dir = KEY_DIR[e.key];
+    if(!dir) return;
+    e.preventDefault();
+    if(gameOver){ newGame(); return; }
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:false});
+
+  let touchStart = null;
+  boardEl.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    touchStart = {x:t.clientX, y:t.clientY};
+  }, {passive:true});
+  boardEl.addEventListener('touchend', (e) => {
+    if(!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    touchStart = null;
+    if(Math.abs(dx) < 24 && Math.abs(dy) < 24){
+      if(gameOver) newGame();
+      return;
+    }
+    if(gameOver){ newGame(); return; }
+    let dir;
+    if(Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
+    else dir = dy > 0 ? 'down' : 'up';
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:true});
+
+
+  window.addEventListener('resize', () => {
+    // reposition all tiles + backgrounds on resize
+    document.querySelectorAll('.cell-bg').forEach((el, idx) => {
+      positionEl(el, Math.floor(idx/SIZE), idx%SIZE);
+    });
+    tiles.forEach(t => positionEl(t.el, t.r, t.c));
+  });
+
+  // ---------------- help modal ----------------
+  const helpBtn = document.getElementById('helpBtn');
+  const helpModal = document.getElementById('helpModal');
+  const closeHelp = document.getElementById('closeHelp');
+  function openHelp(){ helpModal.classList.add('open'); }
+  function dismissHelp(){ helpModal.classList.remove('open'); }
+  if(helpBtn) helpBtn.addEventListener('click', openHelp);
+  if(closeHelp) closeHelp.addEventListener('click', dismissHelp);
+  if(helpModal) helpModal.addEventListener('click', (e) => { if(e.target === helpModal) dismissHelp(); });
+
+  // ---------------- restart button ----------------
+  const restartBtn = document.getElementById('restartBtn');
+  if(restartBtn) restartBtn.addEventListener('click', () => newGame());
+
+  newGame();
+})();
+</script>
+</body>
+</html>
