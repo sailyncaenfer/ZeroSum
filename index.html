@@ -389,7 +389,9 @@
       <div class="overlay" id="overlay"></div>
     </div>
 
-    <button class="restart-btn" id="restartBtn"> Restart </button>
+    <button class="restart-btn" id="restartBtn">
+      Restart <span class="key-hint">R</span>
+    </button>
 
   </div>
 
@@ -459,6 +461,7 @@
   let score = 0;
   let best = 0;
   let busy = false;
+  const SAVE_KEY = 'zerosum_save';
   try{ best = parseInt(localStorage.getItem('zerosum_best')||'0',10) || 0; }catch(e){ best = 0; }
 
   const boardEl = document.getElementById('board');
@@ -519,16 +522,18 @@
     return '';
   }
 
-  function createTileEl(tile){
+  function createTileEl(tile, skipAnim){
     const el = document.createElement('div');
-    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + ' spawn ' + fontSizeClassFor(tile.value);
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + (skipAnim ? '' : ' spawn') + ' ' + fontSizeClassFor(tile.value);
     el.textContent = Math.abs(tile.value);
     positionEl(el, tile.r, tile.c);
     boardEl.appendChild(el);
     tile.el = el;
-    el.addEventListener('animationend', () => {
-      el.classList.remove('spawn');
-    }, {once:true});
+    if(!skipAnim){
+      el.addEventListener('animationend', () => {
+        el.classList.remove('spawn');
+      }, {once:true});
+    }
     return el;
   }
 
@@ -561,6 +566,59 @@
     scoreEl.classList.add('bump');
   }
 
+  // ---------------- persistence ----------------
+  function saveState(){
+    try{
+      const data = {
+        v: 1,
+        tiles: tiles.map(t => ({ id:t.id, value:t.value, r:t.r, c:t.c })),
+        score: score,
+        best: best,
+        bag: bag,
+        tileIdCounter: tileIdCounter,
+        gameOver: gameOver
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    }catch(e){ /* storage unavailable, ignore */ }
+  }
+
+  function clearSavedState(){
+    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  }
+
+  function loadState(){
+    let data;
+    try{
+      const raw = localStorage.getItem(SAVE_KEY);
+      if(!raw) return false;
+      data = JSON.parse(raw);
+    }catch(e){ return false; }
+
+    if(!data || !Array.isArray(data.tiles) || !Array.isArray(data.bag)) return false;
+
+    boardEl.innerHTML = '';
+    buildCellBackgrounds();
+
+    tiles = data.tiles.map(t => ({ id:t.id, value:t.value, r:t.r, c:t.c, el:null }));
+    tiles.forEach(t => createTileEl(t, true));
+
+    score = data.score || 0;
+    best = Math.max(best, data.best || 0);
+    bag = data.bag.slice();
+    tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
+    gameOver = !!data.gameOver;
+    busy = false;
+
+    overlayEl.classList.remove('flash');
+    if(gameOver){
+      void overlayEl.offsetWidth;
+      overlayEl.classList.add('flash');
+    }
+
+    renderScores();
+    return true;
+  }
+
   // ---------------- init ----------------
   function newGame(){
     boardEl.innerHTML = '';
@@ -586,6 +644,7 @@
       createTileEl(tile);
     }
     renderScores();
+    saveState();
   }
 
   function spawnRandomTile(){
@@ -735,6 +794,7 @@
         showGameOver();
       }
       busy = false;
+      saveState();
     }, 140);
 
     return true;
@@ -804,6 +864,12 @@
     tiles.forEach(t => positionEl(t.el, t.r, t.c));
   });
 
+  // ---------------- save on exit (extra safety net) ----------------
+  window.addEventListener('beforeunload', saveState);
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'hidden') saveState();
+  });
+
   // ---------------- help modal ----------------
   const helpBtn = document.getElementById('helpBtn');
   const helpModal = document.getElementById('helpModal');
@@ -818,7 +884,7 @@
   const restartBtn = document.getElementById('restartBtn');
   if(restartBtn) restartBtn.addEventListener('click', () => newGame());
 
-  newGame();
+  if(!loadState()) newGame();
 })();
 </script>
 </body>
