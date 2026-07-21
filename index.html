@@ -52,12 +52,19 @@
     justify-content:flex-end;
   }
   /* ---------- Board column (title always sits directly above the board) ---------- */
-  .board-col{
-    display:flex;
-    flex-direction:column;
-    align-items:flex-start;
+  .board-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 1.2vmin;
-  }
+}
+
+    .board-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 3.6vmin;
+    }
+
   .title{
     font-size: 7.6vmin;
     font-weight: 800;
@@ -115,13 +122,6 @@
     0%{ transform: scale(1); color: #f2f2f2; }
     35%{ transform: scale(1.28); color: var(--accent); }
     100%{ transform: scale(1); color: #f2f2f2; }
-  }
-
-  /* ---------- Board row (board column + preview panel) ---------- */
-  .board-row{
-    display:flex;
-    align-items:flex-start;
-    gap: 1.8vmin;
   }
 
   /* ---------- Board ---------- */
@@ -214,18 +214,18 @@
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 1.1vmin;
+    gap: 1.3vmin;
   }
   .preview-tile{
-    width: calc(var(--cellsize) * 0.5);
-    height: calc(var(--cellsize) * 0.5);
-    border-radius: 1.1vmin;
+    width: calc(var(--cellsize) * 0.68);
+    height: calc(var(--cellsize) * 0.68);
+    border-radius: 1.3vmin;
     display:flex;
     align-items:center;
     justify-content:center;
     font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
     font-weight: 800;
-    font-size: 3.2vmin;
+    font-size: 3.7vmin;
     flex-shrink: 0;
   }
   .preview-tile.pos{
@@ -239,7 +239,7 @@
     box-shadow: 0 0 0 1px #d6d6d6 inset;
   }
   .preview-divider{
-    width: calc(var(--cellsize) * 0.5);
+    width: calc(var(--cellsize) * 0.58);
     border-top: 0.3vmin dashed var(--accent-dim);
     margin: -0.1vmin 0;
   }
@@ -489,21 +489,23 @@
       </div>
     </div>
 
-<div class="board-row">
-      <div class="board-col">
+    <div class="board-col">
         <div class="title">
-          <span class="zero">Zero</span><span class="sum">Sum</span>
-          <div class="title-sub">Cancel Exact Opposites</div>
+            <span class="zero">Zero</span><span class="sum">Sum</span>
+            <div class="title-sub">Cancel Exact Opposites</div>
         </div>
-        <div class="board-wrap">
-          <div class="board" id="board"></div>
-          <div class="overlay" id="overlay"></div>
+
+        <div class="board-row">
+            <div class="board-wrap">
+                <div class="board" id="board"></div>
+                <div class="overlay" id="overlay"></div>
+            </div>
+
+            <div class="preview-panel">
+                <div class="preview-label">Next</div>
+                <div class="preview-list" id="previewPanel"></div>
+            </div>
         </div>
-      </div>
-      <div class="preview-panel">
-        <div class="preview-label">Next</div>
-        <div class="preview-list" id="previewPanel"></div>
-      </div>
     </div>
 
     <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
@@ -613,8 +615,8 @@
   let score = 0;
   let best = 0;
   let busy = false;
-  const SAVE_KEY = 'zerosum_save';
-  try{ best = parseInt(localStorage.getItem('zerosum_best')||'0',10) || 0; }catch(e){ best = 0; }
+  const SAVE_KEY = 'zerosum_save_v2';
+  try{ best = parseInt(localStorage.getItem('zerosum_best_v2')||'0',10) || 0; }catch(e){ best = 0; }
 
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
@@ -720,10 +722,11 @@
 
   // ---------------- next-tiles preview ----------------
   function renderPreview(){
+    const queuePreviews = 5;
     if(!previewPanelEl) return;
-    ensureDeck(3);
+    ensureDeck(queuePreviews);
     previewPanelEl.innerHTML = '';
-    for(let i=0;i<3;i++){
+    for(let i=0;i<queuePreviews;i++){
       const entry = deck[i];
       if(!entry) continue;
       if(entry.boundary){
@@ -1086,7 +1089,7 @@
     tiles = tiles.filter(t => !removedIds.has(t.id));
 
     score += scoreGain;
-    if(score > best){ best = score; try{ localStorage.setItem('zerosum_best', String(best)); }catch(e){} }
+    if(score > best){ best = score; try{ localStorage.setItem('zerosum_best_v2', String(best)); }catch(e){} }
     renderScores();
     if(scoreGain > 0) bumpScore();
 
