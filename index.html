@@ -216,6 +216,11 @@
     align-items:center;
     gap: 1.3vmin;
   }
+
+  .preview-list .preview-divider{
+    margin-top: -0.65vmin;
+    margin-bottom: -0.65vmin;
+  }
   .preview-tile{
     width: calc(var(--cellsize) * 0.68);
     height: calc(var(--cellsize) * 0.68);
@@ -239,9 +244,16 @@
     box-shadow: 0 0 0 1px #d6d6d6 inset;
   }
   .preview-divider{
-    width: calc(var(--cellsize) * 0.58);
-    border-top: 0.3vmin dashed var(--accent-dim);
-    margin: -0.1vmin 0;
+    width: calc(var(--cellsize) * 1.0);
+    height: 0.18vmin;
+    background: linear-gradient(
+        to right,
+        transparent 0%,
+        white 20%,
+        white 80%,
+        transparent 100%
+    );
+    margin: 0.3vmin 0;
   }
 
   /* ---------- Restart button ---------- */
@@ -282,57 +294,6 @@
     font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
     font-size: 1.5vmin;
     font-weight: 800;
-  }
-
-  /* ---------- AI panel ---------- */
-  .ai-panel{
-    display:flex;
-    align-items:center;
-    gap: 1.6vmin;
-    background: var(--panel);
-    border-radius: 1.4vmin;
-    padding: 1.2vmin 2.2vmin;
-    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
-  }
-  .ai-toggle-btn{
-    background: var(--cell);
-    color: #d8d8d8;
-    border: none;
-    border-radius: 1vmin;
-    padding: 1vmin 2vmin;
-    font-family: inherit;
-    font-weight: 800;
-    font-size: 1.7vmin;
-    letter-spacing: 0.04em;
-    cursor:pointer;
-    transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
-  }
-  .ai-toggle-btn.on{
-    background: var(--accent);
-    color: #1a1206;
-  }
-  .ai-toggle-btn:active{
-    transform: scale(0.96);
-  }
-  .ai-depth{
-    display:flex;
-    align-items:center;
-    gap: 0.8vmin;
-    font-size: 1.6vmin;
-    color: var(--muted);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-  .ai-depth input[type="range"]{
-    width: 12vmin;
-    accent-color: var(--accent);
-  }
-  .ai-depth span{
-    color: #ddd;
-    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
-    min-width: 1.6vmin;
-    text-align:center;
   }
 
   /* ---------- Game over flash (no text, just a red pulse) ---------- */
@@ -510,15 +471,6 @@
 
     <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
 
-    <div class="ai-panel">
-      <button class="ai-toggle-btn" id="aiToggleBtn">AI: Off</button>
-      <div class="ai-depth">
-        <label for="aiDepth">Depth</label>
-        <input type="range" id="aiDepth" min="1" max="3" step="1" value="2">
-        <span id="aiDepthVal">2</span>
-      </div>
-    </div>
-
     <div class="footer-hint">Push exact opposites together to <b>cancel</b> them</div>
 
   </div>
@@ -562,8 +514,9 @@
   let anyBlockGenerated = false;
 
   function newShuffledBlock(){
+    const range = 11;
     const block = [];
-    for(let v=-10; v<=10; v++){ if(v!==0) block.push(v); }
+    for(let v=-range; v<=range; v++){ if(v!==0) block.push(v); }
     for(let i=block.length-1;i>0;i--){
       const j = Math.floor(Math.random()*(i+1));
       [block[i],block[j]] = [block[j],block[i]];
@@ -894,148 +847,6 @@
     return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
   }
 
-  // ---------------- AI (expectimax) ----------------
-  // The AI only ever uses information a normal player already has: the
-  // current board, plus the exact next-tile preview (capped at 3 tiles).
-  // It never peeks at the underlying deck beyond that -- so search depth
-  // is capped at 3 plies. Going deeper would mean assuming knowledge of
-  // tiles nobody, human or AI, has actually seen yet.
-  const AI_MAX_DEPTH = 3;
-  let aiEnabled = false;
-  let aiDepth = 2;
-  let aiTimer = null;
-
-  function simulateMoveFull(values, dir){
-    const lines = getLineCoords(dir);
-    let moved = false;
-    let scoreGain = 0;
-    const outValues = values.slice();
-    for(const line of lines){
-      const arr = line.map(p => outValues[p.r*SIZE+p.c]);
-      const mergedInto = new Array(arr.length).fill(false);
-      for(let i=0;i<arr.length-1;i++){
-        if(arr[i+1]===null || arr[i+1]===undefined) continue;
-        if(arr[i]===null || arr[i]===undefined){
-          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
-        } else if(!mergedInto[i] && canMerge(arr[i], arr[i+1])){
-          scoreGain += Math.abs(arr[i]) * 10;
-          arr[i] = null;
-          arr[i+1] = null;
-          mergedInto[i] = true;
-          moved = true;
-        }
-      }
-      for(let idx=0; idx<line.length; idx++){
-        const pos = line[idx];
-        outValues[pos.r*SIZE+pos.c] = arr[idx];
-      }
-    }
-    return { moved, values: outValues, scoreGain };
-  }
-
-  function heuristicScore(values){
-    let emptyCount = 0;
-    let smoothness = 0;
-    let cancelBonus = 0;
-    for(let r=0;r<SIZE;r++){
-      for(let c=0;c<SIZE;c++){
-        const v = values[r*SIZE+c];
-        if(v===null || v===undefined){ emptyCount++; continue; }
-        if(c<SIZE-1){
-          const rv = values[r*SIZE+c+1];
-          if(rv!==null && rv!==undefined){
-            smoothness -= Math.abs(v-rv);
-            if(v+rv===0) cancelBonus += 10;
-          }
-        }
-        if(r<SIZE-1){
-          const bv = values[(r+1)*SIZE+c];
-          if(bv!==null && bv!==undefined){
-            smoothness -= Math.abs(v-bv);
-            if(v+bv===0) cancelBonus += 10;
-          }
-        }
-      }
-    }
-    return emptyCount * 15 + smoothness * 0.5 + cancelBonus;
-  }
-
-  // Max node: try every direction, add any merge score, then hand off to
-  // the chance node for the tile that spawns afterward.
-  function aiExpectimax(values, depth, spawnIndex, preview){
-    if(depth <= 0){
-      return heuristicScore(values);
-    }
-    let best = -Infinity;
-    let anyMove = false;
-    for(const dir of ['left','right','up','down']){
-      const sim = simulateMoveFull(values, dir);
-      if(!sim.moved) continue;
-      anyMove = true;
-      const val = sim.scoreGain + aiChanceNode(sim.values, depth-1, spawnIndex, preview);
-      if(val > best) best = val;
-    }
-    if(!anyMove){
-      return heuristicScore(values) - 500;
-    }
-    return best;
-  }
-
-  // Chance node: the spawned tile's value is exactly the next preview slot
-  // (that's real, known information -- the same thing shown on screen).
-  // Only which empty cell it lands in is random, so we average over that.
-  function aiChanceNode(values, depth, spawnIndex, preview){
-    const empties = [];
-    for(let i=0;i<values.length;i++){ if(values[i]===null || values[i]===undefined) empties.push(i); }
-    if(empties.length === 0 || spawnIndex >= preview.length){
-      // No known spawn left to place (shouldn't occur within the capped
-      // depth) -- evaluate the board as-is rather than guessing a value.
-      return aiExpectimax(values, depth, spawnIndex, preview);
-    }
-    const spawnValue = preview[spawnIndex];
-    let total = 0;
-    for(const idx of empties){
-      const nv = values.slice();
-      nv[idx] = spawnValue;
-      total += aiExpectimax(nv, depth, spawnIndex+1, preview);
-    }
-    return total / empties.length;
-  }
-
-  function aiChooseMove(depth){
-    ensureDeck(AI_MAX_DEPTH);
-    const preview = deck.slice(0, AI_MAX_DEPTH).map(e => e.value);
-    const values = boardValues();
-    let bestDir = null;
-    let bestScore = -Infinity;
-    for(const dir of ['left','right','up','down']){
-      const sim = simulateMoveFull(values, dir);
-      if(!sim.moved) continue;
-      const val = sim.scoreGain + aiChanceNode(sim.values, depth-1, 0, preview);
-      if(val > bestScore){ bestScore = val; bestDir = dir; }
-    }
-    return bestDir;
-  }
-
-  function aiTick(){
-    if(!aiEnabled) return;
-    if(gameOver){ setAiEnabled(false); return; }
-    const dir = aiChooseMove(aiDepth);
-    if(dir) doMove(dir);
-  }
-
-  function setAiEnabled(on){
-    aiEnabled = on;
-    if(aiToggleBtn){
-      aiToggleBtn.textContent = 'AI: ' + (on ? 'On' : 'Off');
-      aiToggleBtn.classList.toggle('on', on);
-    }
-    if(aiTimer){ clearInterval(aiTimer); aiTimer = null; }
-    if(on){
-      aiTimer = setInterval(aiTick, 350);
-    }
-  }
-
   // ---------------- real move (with tile objects) ----------------
   function doMove(dir){
     if(busy) return;
@@ -1185,21 +996,6 @@
   // ---------------- restart button ----------------
   const restartBtn = document.getElementById('restartBtn');
   if(restartBtn) restartBtn.addEventListener('click', () => newGame());
-
-  // ---------------- AI controls ----------------
-  const aiToggleBtn = document.getElementById('aiToggleBtn');
-  const aiDepthInput = document.getElementById('aiDepth');
-  const aiDepthVal = document.getElementById('aiDepthVal');
-  if(aiDepthInput){
-    aiDepth = parseInt(aiDepthInput.value, 10) || 2;
-    aiDepthInput.addEventListener('input', () => {
-      aiDepth = parseInt(aiDepthInput.value, 10) || 2;
-      if(aiDepthVal) aiDepthVal.textContent = String(aiDepth);
-    });
-  }
-  if(aiToggleBtn){
-    aiToggleBtn.addEventListener('click', () => setAiEnabled(!aiEnabled));
-  }
 
   if(!loadState()) newGame();
 })();
