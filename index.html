@@ -17,12 +17,12 @@
     --neg-bg: #f5f5f5;
     --neg-fg: #0a0a0a;
     --muted: #77777c;
-    --gap: 1.6vmin;
-    --cellsize: 18vmin;
+    --gap: 1.4vmin;
+    --cellsize: 17vmin;
   }
   *{ box-sizing: border-box; }
   html,body{
-    margin:0; padding:0; height:100%;
+    margin:0; padding:0; min-height:100%;
     background: var(--bg);
     color: #eee;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -30,29 +30,36 @@
     -webkit-tap-highlight-color: transparent;
   }
   body{
-    display:flex; align-items:center; justify-content:center;
+    display:flex; align-items:flex-start; justify-content:center;
     min-height:100vh;
-    touch-action: none;
+    overflow-y: auto;
+    touch-action: pan-y;
     user-select: none;
   }
   .app{
     width: min(94vmin, 480px);
-    padding: 3vmin 2vmin 4vmin;
+    padding: 2vmin 2vmin 3vmin;
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 2.4vmin;
+    gap: 2vmin;
   }
 
-  /* ---------- Header ---------- */
+  /* ---------- Header (scores only) ---------- */
   .header{
     width:100%;
     display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
+    justify-content:flex-end;
+  }
+  /* ---------- Board column (title always sits directly above the board) ---------- */
+  .board-col{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap: 1.2vmin;
   }
   .title{
-    font-size: 9vmin;
+    font-size: 7.6vmin;
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 0.85;
@@ -69,11 +76,11 @@
     text-stroke: 0.14vmin #cfcfcf;
   }
   .title-sub{
-    font-size: 1.7vmin;
-    letter-spacing: 0.22em;
+    font-size: 1.5vmin;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-top: 0.6vmin;
+    margin-top: 0.4vmin;
     font-weight: 600;
   }
   .scores{
@@ -110,9 +117,17 @@
     100%{ transform: scale(1); color: #f2f2f2; }
   }
 
+  /* ---------- Board row (board column + preview panel) ---------- */
+  .board-row{
+    display:flex;
+    align-items:flex-start;
+    gap: 1.8vmin;
+  }
+
   /* ---------- Board ---------- */
   .board-wrap{
     position:relative;
+    touch-action: none;
   }
   .board{
     position:relative;
@@ -154,22 +169,12 @@
     color: var(--neg-fg);
     box-shadow: 0 0 0 1px #d6d6d6 inset;
   }
-  .tile.small-text{ font-size: 5.2vmin; }
   .tile.spawn{
     animation: spawn 0.22s cubic-bezier(.2,1.4,.4,1) both;
   }
   @keyframes spawn{
     0%{ transform: scale(0); opacity:0; }
     70%{ transform: scale(1.15); opacity:1; }
-    100%{ transform: scale(1); }
-  }
-  .tile.merge-pop{
-    animation: mergepop 0.22s ease 0.11s both;
-    z-index: 3;
-  }
-  @keyframes mergepop{
-    0%{ transform: scale(1); }
-    45%{ transform: scale(1.22); }
     100%{ transform: scale(1); }
   }
   .tile.vanish{
@@ -187,6 +192,56 @@
     0%,100%{ transform: translateX(0); }
     25%{ transform: translateX(-1.2vmin); }
     75%{ transform: translateX(1.2vmin); }
+  }
+
+  /* ---------- Next-tiles preview panel ---------- */
+  .preview-panel{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-top: 0.2vmin;
+    flex-shrink: 0;
+  }
+  .preview-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 1vmin;
+  }
+  .preview-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.1vmin;
+  }
+  .preview-tile{
+    width: calc(var(--cellsize) * 0.5);
+    height: calc(var(--cellsize) * 0.5);
+    border-radius: 1.1vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 3.2vmin;
+    flex-shrink: 0;
+  }
+  .preview-tile.pos{
+    background: var(--pos-bg);
+    color: var(--pos-fg);
+    box-shadow: 0 0 0 1px #2b2b2b inset;
+  }
+  .preview-tile.neg{
+    background: var(--neg-bg);
+    color: var(--neg-fg);
+    box-shadow: 0 0 0 1px #d6d6d6 inset;
+  }
+  .preview-divider{
+    width: calc(var(--cellsize) * 0.5);
+    border-top: 0.3vmin dashed var(--accent-dim);
+    margin: -0.1vmin 0;
   }
 
   /* ---------- Restart button ---------- */
@@ -227,6 +282,57 @@
     font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
     font-size: 1.5vmin;
     font-weight: 800;
+  }
+
+  /* ---------- AI panel ---------- */
+  .ai-panel{
+    display:flex;
+    align-items:center;
+    gap: 1.6vmin;
+    background: var(--panel);
+    border-radius: 1.4vmin;
+    padding: 1.2vmin 2.2vmin;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+  }
+  .ai-toggle-btn{
+    background: var(--cell);
+    color: #d8d8d8;
+    border: none;
+    border-radius: 1vmin;
+    padding: 1vmin 2vmin;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 1.7vmin;
+    letter-spacing: 0.04em;
+    cursor:pointer;
+    transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .ai-toggle-btn.on{
+    background: var(--accent);
+    color: #1a1206;
+  }
+  .ai-toggle-btn:active{
+    transform: scale(0.96);
+  }
+  .ai-depth{
+    display:flex;
+    align-items:center;
+    gap: 0.8vmin;
+    font-size: 1.6vmin;
+    color: var(--muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .ai-depth input[type="range"]{
+    width: 12vmin;
+    accent-color: var(--accent);
+  }
+  .ai-depth span{
+    color: #ddd;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    min-width: 1.6vmin;
+    text-align:center;
   }
 
   /* ---------- Game over flash (no text, just a red pulse) ---------- */
@@ -370,7 +476,6 @@
 <body>
   <div class="app">
     <div class="header">
-      <div class="title"><span class="zero">Zero</span><span class="sum">Sum</span></div>
       <div class="scores">
         <div class="score-box">
           <div class="score-label">Score</div>
@@ -384,12 +489,35 @@
       </div>
     </div>
 
-<div class="board-wrap">
-      <div class="board" id="board"></div>
-      <div class="overlay" id="overlay"></div>
+<div class="board-row">
+      <div class="board-col">
+        <div class="title">
+          <span class="zero">Zero</span><span class="sum">Sum</span>
+          <div class="title-sub">Cancel Exact Opposites</div>
+        </div>
+        <div class="board-wrap">
+          <div class="board" id="board"></div>
+          <div class="overlay" id="overlay"></div>
+        </div>
+      </div>
+      <div class="preview-panel">
+        <div class="preview-label">Next</div>
+        <div class="preview-list" id="previewPanel"></div>
+      </div>
     </div>
 
-    <button class="restart-btn" id="restartBtn">Restart</button>
+    <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
+
+    <div class="ai-panel">
+      <button class="ai-toggle-btn" id="aiToggleBtn">AI: Off</button>
+      <div class="ai-depth">
+        <label for="aiDepth">Depth</label>
+        <input type="range" id="aiDepth" min="1" max="3" step="1" value="2">
+        <span id="aiDepthVal">2</span>
+      </div>
+    </div>
+
+    <div class="footer-hint">Push exact opposites together to <b>cancel</b> them</div>
 
   </div>
 
@@ -401,19 +529,17 @@
       <h3>Tiles</h3>
       <p><span class="swatch pos">5</span> Black tiles hold <b>positive</b> numbers. <span class="swatch neg">5</span> White tiles hold <b>negative</b> numbers. Every tile is drawn from a shuffled deck of the values &minus;10 through 10 (0 is never dealt on its own), so you'll always see a mix of both colors.</p>
 
-      <h3>Merging</h3>
-      <p>When a move pushes two tiles together, they merge only if <b>both</b> of these are true:</p>
-      <ul>
-        <li>Their values add up to something between &minus;10 and 10.</li>
-        <li>Either one of the two tiles has an absolute value of 3 or less, <b>or</b> the two values are exact opposites (they sum to zero).</li>
-      </ul>
-      <p>So a small tile can combine with almost anything nearby, while two big tiles only merge if they perfectly cancel out.</p>
+      <h3>Cancelling</h3>
+      <p>When a move pushes two tiles together, they interact only if they're <b>exact opposites</b> &mdash; equal magnitude, mismatched color, like <span class="swatch pos">7</span> and <span class="swatch neg">7</span>. That pair cancels out completely and both tiles vanish from the board. Any other pairing &mdash; same value, same color, or unrelated numbers &mdash; just blocks and stacks up without merging.</p>
 
       <h3>Scoring</h3>
-      <p>A <b>zero-sum merge</b> is the big reward: when two tiles sum to exactly 0, they both vanish and you score 10 &times; their absolute value. Merges that don't cancel out still combine into a new tile carrying the sum, and now score points too &mdash; equal to the smaller of the two tiles' absolute values. For example, merging &minus;3 and 8 scores 3 points, and merging 2 and &minus;10 scores 2 points.</p>
+      <p>Each cancellation scores <b>10&times;</b> the tile's magnitude. Cancelling a pair of 7s scores 70 points.</p>
 
-      <h3>New Tiles &amp; Game Over</h3>
-      <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a tile to merge. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
+      <h3>Next Tiles</h3>
+      <p>The column beside the board previews the next three tiles that will be dealt in. Tiles are drawn from a shuffled bag of every value from &minus;10 to 10 (excluding 0); once a bag runs out, a fresh one is shuffled. A dashed line in the preview marks the start of that next bag.</p>
+
+      <h3>Game Over</h3>
+      <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
 
       <button class="modal-close" id="closeHelp">Got it</button>
     </div>
@@ -424,34 +550,62 @@
   "use strict";
 
   const SIZE = 4;
-  const CELL_PLUS_GAP_STYLE = () => {};
   let tileIdCounter = 1;
 
-  // ---------------- 20-bag system ----------------
-  let bag = [];
-  function refillBag(){
-    bag = [];
-    for(let v=-10; v<=10; v++){ if(v!==0) bag.push(v); }
-    for(let i=bag.length-1;i>0;i--){
+  // ---------------- Deck system ----------------
+  // A continuous queue of {value, boundary} entries. `boundary` marks the
+  // first entry of a freshly shuffled 20-value bag (except the very first
+  // bag of a game, which has nothing before it to mark a boundary against).
+  let deck = [];
+  let anyBlockGenerated = false;
+
+  function newShuffledBlock(){
+    const block = [];
+    for(let v=-10; v<=10; v++){ if(v!==0) block.push(v); }
+    for(let i=block.length-1;i>0;i--){
       const j = Math.floor(Math.random()*(i+1));
-      [bag[i],bag[j]] = [bag[j],bag[i]];
+      [block[i],block[j]] = [block[j],block[i]];
+    }
+    return block.map((v, idx) => ({ value: v, boundary: idx===0 && anyBlockGenerated }));
+  }
+
+  function ensureDeck(minLen){
+    while(deck.length < minLen){
+      deck.push(...newShuffledBlock());
+      anyBlockGenerated = true;
     }
   }
+
+  function removeAt(index){
+    const removed = deck.splice(index,1)[0];
+    // If we just removed the marked start-of-bag entry out of turn (only
+    // possible during the sign-specific initial deal skipping ahead of it),
+    // pass the boundary marker on to whatever now occupies that slot.
+    // A plain in-order draw (index 0) should simply consume the marker,
+    // not propagate it forward.
+    if(removed && removed.boundary && index > 0 && deck[index] && !deck[index].boundary){
+      deck[index].boundary = true;
+    }
+    ensureDeck(4);
+    renderPreview();
+    return removed;
+  }
+
   function drawValue(){
-    if(bag.length===0) refillBag();
-    return bag.pop();
+    ensureDeck(4);
+    return removeAt(0).value;
   }
+
   function drawValueWithSign(wantPositive){
-    const skipped = [];
-    let value;
+    ensureDeck(4);
+    let i = 0;
     while(true){
-      if(bag.length===0) refillBag();
-      const v = bag.pop();
-      if((v > 0) === wantPositive){ value = v; break; }
-      skipped.push(v);
+      if(i >= deck.length) ensureDeck(deck.length + 1);
+      if((deck[i].value > 0) === wantPositive){
+        return removeAt(i).value;
+      }
+      i++;
     }
-    bag.push(...skipped);
-    return value;
   }
 
   // ---------------- state ----------------
@@ -466,6 +620,7 @@
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
   const overlayEl = document.getElementById('overlay');
+  const previewPanelEl = document.getElementById('previewPanel');
   let gameOver = false;
 
   function occupied(r,c){
@@ -480,12 +635,11 @@
     return list;
   }
 
+  // A pair only interacts if they're exact opposites (equal magnitude,
+  // opposite sign) -- they cancel out and vanish. Same-value pairs and
+  // anything else just block each other, no merging.
   function canMerge(a,b){
-    const sum = a + b;
-    const sumInRange = Math.abs(sum) <= 10;      // hard cap, never overridden
-    const oneSmall = Math.abs(a) <= 3 || Math.abs(b) <= 3;
-    const zeroSum = sum === 0;
-    return sumInRange && (oneSmall || zeroSum);
+    return a + b === 0;
   }
 
   // ---------------- board rendering ----------------
@@ -564,15 +718,36 @@
     scoreEl.classList.add('bump');
   }
 
+  // ---------------- next-tiles preview ----------------
+  function renderPreview(){
+    if(!previewPanelEl) return;
+    ensureDeck(3);
+    previewPanelEl.innerHTML = '';
+    for(let i=0;i<3;i++){
+      const entry = deck[i];
+      if(!entry) continue;
+      if(entry.boundary){
+        const div = document.createElement('div');
+        div.className = 'preview-divider';
+        previewPanelEl.appendChild(div);
+      }
+      const el = document.createElement('div');
+      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg');
+      el.textContent = Math.abs(entry.value);
+      previewPanelEl.appendChild(el);
+    }
+  }
+
   // ---------------- persistence ----------------
   function saveState(){
     try{
       const data = {
-        v: 1,
+        v: 2,
         tiles: tiles.map(t => ({ id:t.id, value:t.value, r:t.r, c:t.c })),
         score: score,
         best: best,
-        bag: bag,
+        deck: deck,
+        anyBlockGenerated: anyBlockGenerated,
         tileIdCounter: tileIdCounter,
         gameOver: gameOver
       };
@@ -592,7 +767,7 @@
       data = JSON.parse(raw);
     }catch(e){ return false; }
 
-    if(!data || !Array.isArray(data.tiles) || !Array.isArray(data.bag)) return false;
+    if(!data || data.v !== 2 || !Array.isArray(data.tiles) || !Array.isArray(data.deck)) return false;
 
     boardEl.innerHTML = '';
     buildCellBackgrounds();
@@ -602,7 +777,8 @@
 
     score = data.score || 0;
     best = Math.max(best, data.best || 0);
-    bag = data.bag.slice();
+    deck = data.deck.slice();
+    anyBlockGenerated = !!data.anyBlockGenerated;
     tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
     gameOver = !!data.gameOver;
     busy = false;
@@ -614,6 +790,7 @@
     }
 
     renderScores();
+    renderPreview();
     return true;
   }
 
@@ -625,7 +802,8 @@
     busy = false;
     gameOver = false;
     overlayEl.classList.remove('flash');
-    refillBag();
+    deck = [];
+    anyBlockGenerated = false;
     buildCellBackgrounds();
 
     const empties = emptyCells();
@@ -642,6 +820,7 @@
       createTileEl(tile);
     }
     renderScores();
+    renderPreview();
     saveState();
   }
 
@@ -691,8 +870,7 @@
         if(arr[i]===null || arr[i]===undefined){
           arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
         } else if(!mergedInto[i] && canMerge(arr[i], arr[i+1])){
-          const sum = arr[i]+arr[i+1];
-          arr[i] = (sum===0) ? null : sum;
+          arr[i] = null;
           arr[i+1] = null;
           mergedInto[i] = true;
           moved = true;
@@ -713,6 +891,148 @@
     return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
   }
 
+  // ---------------- AI (expectimax) ----------------
+  // The AI only ever uses information a normal player already has: the
+  // current board, plus the exact next-tile preview (capped at 3 tiles).
+  // It never peeks at the underlying deck beyond that -- so search depth
+  // is capped at 3 plies. Going deeper would mean assuming knowledge of
+  // tiles nobody, human or AI, has actually seen yet.
+  const AI_MAX_DEPTH = 3;
+  let aiEnabled = false;
+  let aiDepth = 2;
+  let aiTimer = null;
+
+  function simulateMoveFull(values, dir){
+    const lines = getLineCoords(dir);
+    let moved = false;
+    let scoreGain = 0;
+    const outValues = values.slice();
+    for(const line of lines){
+      const arr = line.map(p => outValues[p.r*SIZE+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]===null || arr[i+1]===undefined) continue;
+        if(arr[i]===null || arr[i]===undefined){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i] && canMerge(arr[i], arr[i+1])){
+          scoreGain += Math.abs(arr[i]) * 10;
+          arr[i] = null;
+          arr[i+1] = null;
+          mergedInto[i] = true;
+          moved = true;
+        }
+      }
+      for(let idx=0; idx<line.length; idx++){
+        const pos = line[idx];
+        outValues[pos.r*SIZE+pos.c] = arr[idx];
+      }
+    }
+    return { moved, values: outValues, scoreGain };
+  }
+
+  function heuristicScore(values){
+    let emptyCount = 0;
+    let smoothness = 0;
+    let cancelBonus = 0;
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const v = values[r*SIZE+c];
+        if(v===null || v===undefined){ emptyCount++; continue; }
+        if(c<SIZE-1){
+          const rv = values[r*SIZE+c+1];
+          if(rv!==null && rv!==undefined){
+            smoothness -= Math.abs(v-rv);
+            if(v+rv===0) cancelBonus += 10;
+          }
+        }
+        if(r<SIZE-1){
+          const bv = values[(r+1)*SIZE+c];
+          if(bv!==null && bv!==undefined){
+            smoothness -= Math.abs(v-bv);
+            if(v+bv===0) cancelBonus += 10;
+          }
+        }
+      }
+    }
+    return emptyCount * 15 + smoothness * 0.5 + cancelBonus;
+  }
+
+  // Max node: try every direction, add any merge score, then hand off to
+  // the chance node for the tile that spawns afterward.
+  function aiExpectimax(values, depth, spawnIndex, preview){
+    if(depth <= 0){
+      return heuristicScore(values);
+    }
+    let best = -Infinity;
+    let anyMove = false;
+    for(const dir of ['left','right','up','down']){
+      const sim = simulateMoveFull(values, dir);
+      if(!sim.moved) continue;
+      anyMove = true;
+      const val = sim.scoreGain + aiChanceNode(sim.values, depth-1, spawnIndex, preview);
+      if(val > best) best = val;
+    }
+    if(!anyMove){
+      return heuristicScore(values) - 500;
+    }
+    return best;
+  }
+
+  // Chance node: the spawned tile's value is exactly the next preview slot
+  // (that's real, known information -- the same thing shown on screen).
+  // Only which empty cell it lands in is random, so we average over that.
+  function aiChanceNode(values, depth, spawnIndex, preview){
+    const empties = [];
+    for(let i=0;i<values.length;i++){ if(values[i]===null || values[i]===undefined) empties.push(i); }
+    if(empties.length === 0 || spawnIndex >= preview.length){
+      // No known spawn left to place (shouldn't occur within the capped
+      // depth) -- evaluate the board as-is rather than guessing a value.
+      return aiExpectimax(values, depth, spawnIndex, preview);
+    }
+    const spawnValue = preview[spawnIndex];
+    let total = 0;
+    for(const idx of empties){
+      const nv = values.slice();
+      nv[idx] = spawnValue;
+      total += aiExpectimax(nv, depth, spawnIndex+1, preview);
+    }
+    return total / empties.length;
+  }
+
+  function aiChooseMove(depth){
+    ensureDeck(AI_MAX_DEPTH);
+    const preview = deck.slice(0, AI_MAX_DEPTH).map(e => e.value);
+    const values = boardValues();
+    let bestDir = null;
+    let bestScore = -Infinity;
+    for(const dir of ['left','right','up','down']){
+      const sim = simulateMoveFull(values, dir);
+      if(!sim.moved) continue;
+      const val = sim.scoreGain + aiChanceNode(sim.values, depth-1, 0, preview);
+      if(val > bestScore){ bestScore = val; bestDir = dir; }
+    }
+    return bestDir;
+  }
+
+  function aiTick(){
+    if(!aiEnabled) return;
+    if(gameOver){ setAiEnabled(false); return; }
+    const dir = aiChooseMove(aiDepth);
+    if(dir) doMove(dir);
+  }
+
+  function setAiEnabled(on){
+    aiEnabled = on;
+    if(aiToggleBtn){
+      aiToggleBtn.textContent = 'AI: ' + (on ? 'On' : 'Off');
+      aiToggleBtn.classList.toggle('on', on);
+    }
+    if(aiTimer){ clearInterval(aiTimer); aiTimer = null; }
+    if(on){
+      aiTimer = setInterval(aiTick, 350);
+    }
+  }
+
   // ---------------- real move (with tile objects) ----------------
   function doMove(dir){
     if(busy) return;
@@ -720,7 +1040,6 @@
     let moved = false;
     let scoreGain = 0;
     const removedIds = new Set();
-    const mergedIds = new Set();
 
     for(const line of lines){
       const lineTiles = line.map(p => occupied(p.r, p.c) || null);
@@ -734,19 +1053,10 @@
           moved = true;
         } else if(!mergedInto[i] && canMerge(lineTiles[i].value, lineTiles[i+1].value)){
           const a = lineTiles[i], b = lineTiles[i+1];
-          const sum = a.value + b.value;
-          if(sum === 0){
-            scoreGain += Math.abs(a.value) * 10;
-            removedIds.add(a.id);
-            removedIds.add(b.id);
-            lineTiles[i] = null;
-          } else {
-            scoreGain += Math.min(Math.abs(a.value), Math.abs(b.value));
-            a.value = sum;
-            mergedIds.add(a.id);
-            removedIds.add(b.id);
-            lineTiles[i] = a;
-          }
+          scoreGain += Math.abs(a.value) * 10;
+          removedIds.add(a.id);
+          removedIds.add(b.id);
+          lineTiles[i] = null;
           lineTiles[i+1] = null;
           mergedInto[i] = true;
           moved = true;
@@ -763,15 +1073,10 @@
 
     if(!moved) return false;
 
-    // update DOM for surviving/merged tiles first (slide + pop)
+    // update DOM for surviving (unmerged) tiles first, so they slide into place
     tiles.forEach(t => {
       if(removedIds.has(t.id)) return;
       updateTileEl(t);
-      if(mergedIds.has(t.id)){
-        t.el.classList.remove('merge-pop');
-        void t.el.offsetWidth;
-        t.el.classList.add('merge-pop');
-      }
     });
 
     // animate out removed tiles, then clean up
@@ -877,6 +1182,21 @@
   // ---------------- restart button ----------------
   const restartBtn = document.getElementById('restartBtn');
   if(restartBtn) restartBtn.addEventListener('click', () => newGame());
+
+  // ---------------- AI controls ----------------
+  const aiToggleBtn = document.getElementById('aiToggleBtn');
+  const aiDepthInput = document.getElementById('aiDepth');
+  const aiDepthVal = document.getElementById('aiDepthVal');
+  if(aiDepthInput){
+    aiDepth = parseInt(aiDepthInput.value, 10) || 2;
+    aiDepthInput.addEventListener('input', () => {
+      aiDepth = parseInt(aiDepthInput.value, 10) || 2;
+      if(aiDepthVal) aiDepthVal.textContent = String(aiDepth);
+    });
+  }
+  if(aiToggleBtn){
+    aiToggleBtn.addEventListener('click', () => setAiEnabled(!aiEnabled));
+  }
 
   if(!loadState()) newGame();
 })();
