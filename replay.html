@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ZeroSum Replay Viewer</title>
+<style>
+  :root{
+    --bg: #121213;
+    --panel: #1c1c1e;
+    --board: #232326;
+    --cell: #2c2c30;
+    --accent: #e8a33d;
+    --accent-dim: #8a672a;
+    --pos-bg: #0a0a0a;
+    --pos-fg: #f5f5f5;
+    --neg-bg: #f5f5f5;
+    --neg-fg: #0a0a0a;
+    --muted: #77777c;
+    --gap: 1.4vmin;
+    --cellsize: 17vmin;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: var(--bg);
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+  body{
+    display:flex; align-items:flex-start; justify-content:center;
+    min-height:100vh;
+    overflow-y: auto;
+  }
+  .app{
+    width: min(94vmin, 480px);
+    padding: 2vmin 2vmin 3vmin;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.6vmin;
+  }
+  .header{
+    width:100%;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .title{
+    font-size: 5vmin;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .title .zero{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.12vmin #3a3a3a;
+    text-stroke: 0.12vmin #3a3a3a;
+  }
+  .title .sum{
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.12vmin #cfcfcf;
+    text-stroke: 0.12vmin #cfcfcf;
+  }
+  .title.nnzm .zero{
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.12vmin #cfcfcf;
+    text-stroke: 0.12vmin #cfcfcf;
+  }
+  .title.nnzm .sum{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.12vmin #3a3a3a;
+    text-stroke: 0.12vmin #3a3a3a;
+  }
+  .scores{ display:flex; gap: 1.4vmin; }
+  .score-box{
+    background: var(--panel);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin 2.4vmin;
+    text-align:center;
+    min-width: 14vmin;
+  }
+  .score-label{
+    font-size: 1.4vmin; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  .score-value{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 2.6vmin; font-weight: 700; color: #f2f2f2;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .drop-zone{
+    width:100%;
+    border: 0.25vmin dashed #3d3d40;
+    border-radius: 2vmin;
+    padding: 4vmin 2vmin;
+    text-align:center;
+    color: var(--muted);
+    font-size: 1.9vmin;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .drop-zone:hover, .drop-zone.dragover{
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .drop-zone input{ display:none; }
+
+  .board-row{
+    display:flex;
+    align-items:flex-start;
+    gap: 3.6vmin;
+  }
+  .board-wrap{ position:relative; touch-action: pan-y; }
+  .board{
+    position:relative;
+    width: calc(4 * var(--cellsize) + 5 * var(--gap));
+    height: calc(4 * var(--cellsize) + 5 * var(--gap));
+    background: var(--board);
+    border-radius: 2vmin;
+    padding: var(--gap);
+  }
+
+  /* ---------- Next-tiles preview panel ---------- */
+  .preview-panel{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-top: 0.2vmin;
+    flex-shrink: 0;
+  }
+  .preview-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 1vmin;
+  }
+  .preview-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.3vmin;
+    width: calc(var(--cellsize) * 1.0);
+  }
+  .preview-list .preview-divider{
+    margin-top: -0.65vmin;
+    margin-bottom: -0.65vmin;
+  }
+  .preview-tile{
+    width: calc(var(--cellsize) * 0.68);
+    height: calc(var(--cellsize) * 0.68);
+    border-radius: 1.3vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 3.7vmin;
+    flex-shrink: 0;
+  }
+  .preview-tile.pos{
+    background: var(--pos-bg);
+    color: var(--pos-fg);
+    box-shadow: 0 0 0 1px #2b2b2b inset;
+  }
+  .preview-tile.neg{
+    background: var(--neg-bg);
+    color: var(--neg-fg);
+    box-shadow: 0 0 0 1px #d6d6d6 inset;
+  }
+  .preview-divider{
+    width: calc(var(--cellsize) * 1.0);
+    height: 0.18vmin;
+    background: linear-gradient(
+        to right,
+        transparent 0%,
+        white 20%,
+        white 80%,
+        transparent 100%
+    );
+    margin: 0.3vmin 0;
+  }
+  .cell-bg{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    background: var(--cell);
+    border-radius: 1.4vmin;
+  }
+  .tile{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    border-radius: 1.4vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 6.4vmin;
+    transition: left 0.1s ease, top 0.1s ease;
+    z-index: 2;
+  }
+  .tile.pos{ background: var(--pos-bg); color: var(--pos-fg); box-shadow: 0 0 0 1px #2b2b2b inset; }
+  .tile.neg{ background: var(--neg-bg); color: var(--neg-fg); box-shadow: 0 0 0 1px #d6d6d6 inset; }
+
+  .controls{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    gap: 1vmin;
+  }
+  .scrub-row{
+    display:flex;
+    align-items:center;
+    gap: 1.4vmin;
+    width:100%;
+  }
+  .step-label{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 1.8vmin;
+    color: var(--muted);
+    min-width: 15vmin;
+    text-align:center;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type=range]{
+    flex:1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1vmin;
+    border-radius: 1vmin;
+    background: var(--panel);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    appearance:none;
+    width: 2.6vmin;
+    height: 2.6vmin;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor:pointer;
+    box-shadow: 0 0.2vmin 0.6vmin rgba(0,0,0,0.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width: 2.6vmin;
+    height: 2.6vmin;
+    border-radius: 50%;
+    background: var(--accent);
+    border:none;
+    cursor:pointer;
+  }
+  .btn-row{
+    display:flex;
+    gap: 1.2vmin;
+    justify-content:center;
+    flex-wrap: wrap;
+  }
+  .btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 0.8vmin;
+    background: var(--panel);
+    color: #d8d8d8;
+    border: none;
+    border-radius: 1.4vmin;
+    padding: 1.2vmin 2.6vmin;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1.8vmin;
+    cursor:pointer;
+    transition: color 0.15s ease, transform 0.1s ease;
+  }
+  .btn:hover{ color: var(--accent); }
+  .btn:active{ transform: scale(0.95); }
+  .btn:disabled{ opacity: 0.35; cursor:default; }
+  .btn:disabled:hover{ color:#d8d8d8; }
+
+  .dir-badge{
+    font-size: 1.8vmin;
+    color: var(--accent);
+    font-weight: 800;
+    min-width: 8vmin;
+    text-align:center;
+  }
+  .footer-hint{
+    color: var(--muted);
+    font-size: 1.5vmin;
+    text-align:center;
+    letter-spacing: 0.04em;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="title" id="titleEl"><span class="zero">Zero</span><span class="sum">Sum</span> <span style="font-size:2.4vmin; color:var(--muted); font-weight:600;">replay</span></div>
+      <div class="scores">
+        <div class="score-box">
+          <div class="score-label">Score</div>
+          <div class="score-value" id="score">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+      Click to choose a <b>.zsr</b> replay file, or drag one here
+      <input type="file" id="fileInput" accept=".zsr">
+    </div>
+
+    <div id="viewerArea" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center; gap:1.6vmin;">
+      <div class="board-row">
+        <div class="board-wrap">
+          <div class="board" id="board"></div>
+        </div>
+        <div class="preview-panel" id="previewPanelWrap">
+          <div class="preview-label">Next</div>
+          <div class="preview-list" id="previewPanel"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="scrub-row">
+          <button class="btn" id="stepBackBtn">&larr;</button>
+          <input type="range" id="scrub" min="0" max="0" value="0" step="1">
+          <button class="btn" id="stepFwdBtn">&rarr;</button>
+        </div>
+        <div class="scrub-row" style="justify-content:center;">
+          <div class="step-label" id="stepLabel">step 0 / 0</div>
+          <div class="dir-badge" id="dirBadge"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="playBtn">&#9654; Play</button>
+          <button class="btn" id="startBtn">&#8676; Start</button>
+          <button class="btn" id="endBtn">End &#8677;</button>
+          <button class="btn" id="loadAnotherBtn">Load another file</button>
+        </div>
+      </div>
+      <div class="footer-hint">Drag the slider, use &larr;/&rarr; keys, or <b>scroll</b> over the board to step through the replay.</div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  const SIZE = 4;
+
+  // ================= Bit reader =================
+  function BitReader(bytes){
+    this.bytes = bytes;
+    this.pos = 0; // in bits
+  }
+  BitReader.prototype.readBits = function(n){
+    let v = 0;
+    for(let i=0;i<n;i++){
+      const byteIndex = this.pos >> 3;
+      const bitIndex = 7 - (this.pos & 7);
+      const bit = (this.bytes[byteIndex] >> bitIndex) & 1;
+      v = (v << 1) | bit;
+      this.pos++;
+    }
+    return v;
+  };
+  function readSignedValue(br){
+    const sign = br.readBits(1);
+    const mag = br.readBits(7);
+    return sign ? -mag : mag;
+  }
+
+  const QUEUE_PREVIEW_LEN = 5; // must match the writer in index.html / index_AI.html
+
+  function readQueueEntry(br){
+    const value = readSignedValue(br);
+    const boundary = br.readBits(1) === 1;
+    return { value, boundary };
+  }
+
+  const DIR_NAMES = ['left','right','up','down'];
+  const DIR_ARROWS = { left:'\u2190', right:'\u2192', up:'\u2191', down:'\u2193' };
+
+  function parseReplay(bytes){
+    if(bytes.length < 4 || bytes[0]!==0x5A || bytes[1]!==0x53 || bytes[2]!==0x52){
+      throw new Error('Not a valid .zsr file (bad magic header)');
+    }
+    const version = bytes[3];
+    const hasQueue = version === 0x32; // "ZSR2" -- adds preview-queue snapshots
+    if(version !== 0x31 && version !== 0x32){
+      throw new Error('Not a valid .zsr file (bad magic header)');
+    }
+    const br = new BitReader(bytes.subarray(4));
+    const mode = br.readBits(1) === 1 ? 'nnzm' : 'zerosum';
+    const initialSpawns = [];
+    for(let i=0;i<8;i++){
+      const pos = br.readBits(4);
+      const value = readSignedValue(br);
+      initialSpawns.push({pos, value});
+    }
+    let initialQueue = [];
+    if(hasQueue){
+      for(let i=0;i<QUEUE_PREVIEW_LEN;i++) initialQueue.push(readQueueEntry(br));
+    }
+    const moveCount = br.readBits(24);
+    const moves = [];
+    for(let i=0;i<moveCount;i++){
+      const dir = DIR_NAMES[br.readBits(2)];
+      const pos = br.readBits(4);
+      const value = readSignedValue(br);
+      let queue = [];
+      if(hasQueue){
+        for(let j=0;j<QUEUE_PREVIEW_LEN;j++) queue.push(readQueueEntry(br));
+      }
+      moves.push({dir, spawn: {pos, value}, queue});
+    }
+    return { mode, initialSpawns, initialQueue, moves, hasQueue };
+  }
+
+  // ================= Game-rule simulation (pure, no DOM) =================
+  function combineEnabledFor(mode){ return mode === 'zerosum'; }
+
+  function currentMaxValue(score){
+    return 10 + Math.floor(score / 10000);
+  }
+
+  function evaluateMerge(a, b, mode, score){
+    if(a + b === 0){
+      return { type:'cancel', scoreGain: Math.abs(a) * 10 };
+    }
+    if(!combineEnabledFor(mode)) return null;
+    if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= currentMaxValue(score)){
+        return { type:'combine', value: sum, scoreGain: Math.min(Math.abs(a), Math.abs(b)) };
+      }
+    }
+    return null;
+  }
+
+  function getLineCoords(dir){
+    const lines = [];
+    if(dir==='left'){
+      for(let r=0;r<SIZE;r++){ const line=[]; for(let c=0;c<SIZE;c++) line.push({r,c}); lines.push(line); }
+    } else if(dir==='right'){
+      for(let r=0;r<SIZE;r++){ const line=[]; for(let c=SIZE-1;c>=0;c--) line.push({r,c}); lines.push(line); }
+    } else if(dir==='up'){
+      for(let c=0;c<SIZE;c++){ const line=[]; for(let r=0;r<SIZE;r++) line.push({r,c}); lines.push(line); }
+    } else if(dir==='down'){
+      for(let c=0;c<SIZE;c++){ const line=[]; for(let r=SIZE-1;r>=0;r--) line.push({r,c}); lines.push(line); }
+    }
+    return lines;
+  }
+
+  // Applies one move to a plain tile list [{id,value,r,c}], pure function.
+  function applyMove(tiles, dir, mode, score){
+    const occ = (r,c) => tiles.find(t => t.r===r && t.c===c);
+    const lines = getLineCoords(dir);
+    let scoreGain = 0;
+    const removedIds = new Set();
+
+    for(const line of lines){
+      const lineTiles = line.map(p => occ(p.r,p.c) || null);
+      const mergedInto = new Array(lineTiles.length).fill(false);
+      for(let i=0;i<lineTiles.length-1;i++){
+        if(!lineTiles[i+1]) continue;
+        if(!lineTiles[i]){
+          lineTiles[i] = lineTiles[i+1];
+          lineTiles[i+1] = null;
+        } else if(!mergedInto[i]){
+          const a = lineTiles[i], b = lineTiles[i+1];
+          const result = evaluateMerge(a.value, b.value, mode, score);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              removedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i] = null;
+              lineTiles[i+1] = null;
+            } else {
+              a.value = result.value;
+              removedIds.add(b.id);
+              lineTiles[i+1] = null;
+            }
+            mergedInto[i] = true;
+          }
+        }
+      }
+      for(let idx=0; idx<line.length; idx++){
+        const pos = line[idx];
+        const t = lineTiles[idx];
+        if(t){ t.r = pos.r; t.c = pos.c; }
+      }
+    }
+
+    const survivors = tiles.filter(t => !removedIds.has(t.id));
+    return { tiles: survivors, scoreGain };
+  }
+
+  // ================= Build full state timeline from a parsed replay =================
+  function buildTimeline(replay){
+    let idCounter = 1;
+    const states = []; // { tiles:[{id,value,r,c}], score, dir|null, queue:[{value,boundary}...] }
+
+    let tiles = replay.initialSpawns.map(s => ({
+      id: idCounter++,
+      value: s.value,
+      r: Math.floor(s.pos / SIZE),
+      c: s.pos % SIZE
+    }));
+    let score = 0;
+    states.push({ tiles: tiles.map(t=>({...t})), score, dir: null, queue: replay.initialQueue || [] });
+
+    for(const move of replay.moves){
+      const result = applyMove(tiles, move.dir, replay.mode, score);
+      tiles = result.tiles;
+      score += result.scoreGain;
+      tiles.push({
+        id: idCounter++,
+        value: move.spawn.value,
+        r: Math.floor(move.spawn.pos / SIZE),
+        c: move.spawn.pos % SIZE
+      });
+      states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: move.queue || [] });
+    }
+    return states;
+  }
+
+  // ================= Rendering =================
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const titleEl = document.getElementById('titleEl');
+  const previewPanelEl = document.getElementById('previewPanel');
+  const previewPanelWrapEl = document.getElementById('previewPanelWrap');
+  const scrubEl = document.getElementById('scrub');
+  const stepLabelEl = document.getElementById('stepLabel');
+  const dirBadgeEl = document.getElementById('dirBadge');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const viewerArea = document.getElementById('viewerArea');
+  const playBtn = document.getElementById('playBtn');
+  const startBtn = document.getElementById('startBtn');
+  const endBtn = document.getElementById('endBtn');
+  const stepBackBtn = document.getElementById('stepBackBtn');
+  const stepFwdBtn = document.getElementById('stepFwdBtn');
+  const loadAnotherBtn = document.getElementById('loadAnotherBtn');
+
+  let states = [];
+  let mode = 'zerosum';
+  let curIndex = 0;
+  let playing = false;
+  let playTimer = null;
+  let hasQueue = false;
+
+  function applyModeVisuals(){
+    if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
+  }
+
+  function cellPixel(){
+    const rootStyles = getComputedStyle(document.documentElement);
+    const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+    const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
+    const gap = parseFloat(rootStyles.getPropertyValue('--gap')) * vmin;
+    return {cell, gap};
+  }
+  function positionEl(el, r, c){
+    const {cell, gap} = cellPixel();
+    el.style.left = (gap + c * (cell + gap)) + 'px';
+    el.style.top = (gap + r * (cell + gap)) + 'px';
+  }
+  function buildCellBackgrounds(){
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const bg = document.createElement('div');
+      bg.className = 'cell-bg';
+      positionEl(bg, r, c);
+      boardEl.appendChild(bg);
+    }
+  }
+
+  function renderPreview(queue){
+    if(!previewPanelEl) return;
+    previewPanelEl.innerHTML = '';
+    queue.forEach(entry => {
+      if(entry.boundary){
+        const div = document.createElement('div');
+        div.className = 'preview-divider';
+        previewPanelEl.appendChild(div);
+      }
+      const el = document.createElement('div');
+      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg');
+      el.textContent = Math.abs(entry.value);
+      previewPanelEl.appendChild(el);
+    });
+  }
+
+  function renderState(index){
+    curIndex = Math.max(0, Math.min(states.length-1, index));
+    const st = states[curIndex];
+
+    // clear tiles only (keep cell backgrounds)
+    boardEl.querySelectorAll('.tile').forEach(el => el.remove());
+    st.tiles.forEach(t => {
+      const el = document.createElement('div');
+      el.className = 'tile ' + (t.value > 0 ? 'pos' : 'neg');
+      el.textContent = Math.abs(t.value);
+      positionEl(el, t.r, t.c);
+      boardEl.appendChild(el);
+    });
+
+    if(hasQueue) renderPreview(st.queue || []);
+
+    scoreEl.textContent = st.score;
+    scrubEl.value = curIndex;
+    stepLabelEl.textContent = 'step ' + curIndex + ' / ' + (states.length-1);
+    dirBadgeEl.textContent = st.dir ? DIR_ARROWS[st.dir] : '';
+
+    stepBackBtn.disabled = curIndex === 0;
+    stepFwdBtn.disabled = curIndex === states.length-1;
+    if(curIndex === states.length-1) stopPlaying();
+  }
+
+  function stopPlaying(){
+    playing = false;
+    playBtn.textContent = '\u25B6 Play';
+    if(playTimer){ clearInterval(playTimer); playTimer = null; }
+  }
+  function startPlaying(){
+    if(curIndex >= states.length-1) renderState(0);
+    playing = true;
+    playBtn.textContent = '\u23F8 Pause';
+    playTimer = setInterval(() => {
+      if(curIndex >= states.length-1){ stopPlaying(); return; }
+      renderState(curIndex+1);
+    }, 260);
+  }
+
+  function loadReplayFromBytes(bytes){
+    let replay;
+    try{
+      replay = parseReplay(bytes);
+    }catch(err){
+      alert('Could not read replay: ' + err.message);
+      return;
+    }
+    mode = replay.mode;
+    hasQueue = !!replay.hasQueue;
+    states = buildTimeline(replay);
+
+    if(previewPanelWrapEl) previewPanelWrapEl.classList.toggle('hidden', !hasQueue);
+
+    boardEl.innerHTML = '';
+    buildCellBackgrounds();
+
+    applyModeVisuals();
+    scrubEl.min = 0;
+    scrubEl.max = states.length - 1;
+    dropZone.classList.add('hidden');
+    viewerArea.classList.remove('hidden');
+    renderState(0);
+  }
+
+  function handleFile(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const bytes = new Uint8Array(reader.result);
+      loadReplayFromBytes(bytes);
+    };
+    reader.onerror = () => alert('Could not read the file.');
+    reader.readAsArrayBuffer(file);
+  }
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    if(e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  ['dragenter','dragover'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  });
+  ['dragleave','drop'].forEach(evt => {
+    dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+  });
+  dropZone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(file) handleFile(file);
+  });
+
+  loadAnotherBtn.addEventListener('click', () => {
+    stopPlaying();
+    viewerArea.classList.add('hidden');
+    dropZone.classList.remove('hidden');
+    fileInput.value = '';
+  });
+
+  scrubEl.addEventListener('input', () => {
+    stopPlaying();
+    renderState(parseInt(scrubEl.value, 10));
+  });
+  stepBackBtn.addEventListener('click', () => { stopPlaying(); renderState(curIndex-1); });
+  stepFwdBtn.addEventListener('click', () => { stopPlaying(); renderState(curIndex+1); });
+  startBtn.addEventListener('click', () => { stopPlaying(); renderState(0); });
+  endBtn.addEventListener('click', () => { stopPlaying(); renderState(states.length-1); });
+  playBtn.addEventListener('click', () => { playing ? stopPlaying() : startPlaying(); });
+
+  // Scroll over the board to scrub through the replay
+  document.getElementById('board').parentElement.addEventListener('wheel', (e) => {
+    if(!states.length) return;
+    e.preventDefault();
+    stopPlaying();
+    const delta = e.deltaY > 0 ? 1 : -1;
+    renderState(curIndex + delta);
+  }, {passive:false});
+
+  window.addEventListener('keydown', (e) => {
+    if(!states.length) return;
+    if(e.key === 'ArrowRight'){ e.preventDefault(); stopPlaying(); renderState(curIndex+1); }
+    else if(e.key === 'ArrowLeft'){ e.preventDefault(); stopPlaying(); renderState(curIndex-1); }
+    else if(e.key === ' '){ e.preventDefault(); playing ? stopPlaying() : startPlaying(); }
+    else if(e.key === 'Home'){ e.preventDefault(); stopPlaying(); renderState(0); }
+    else if(e.key === 'End'){ e.preventDefault(); stopPlaying(); renderState(states.length-1); }
+  });
+
+  window.addEventListener('resize', () => {
+    if(!states.length) return;
+    document.querySelectorAll('.cell-bg').forEach((el, idx) => {
+      positionEl(el, Math.floor(idx/SIZE), idx%SIZE);
+    });
+    renderState(curIndex);
+  });
+})();
+</script>
+</body>
+</html>

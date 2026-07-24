@@ -236,11 +236,6 @@
     flex-direction:column;
     align-items:center;
     gap: 1.3vmin;
-    /* Fixed width = the divider's width (the widest possible child), so the
-       column never resizes depending on whether a bag-separator happens to
-       be visible in the current preview window. Without this, the board
-       (which sits to the left, in a row centered as a whole) would shift
-       left/right as the queue's content changed width. */
     width: calc(var(--cellsize) * 1.0);
   }
 
@@ -283,7 +278,11 @@
     margin: 0.3vmin 0;
   }
 
-  /* ---------- Restart button ---------- */
+  /* ---------- Restart / Replay buttons ---------- */
+  .btn-row{
+    display:flex;
+    gap: 1.4vmin;
+  }
   .restart-btn{
     display:flex;
     align-items:center;
@@ -496,7 +495,10 @@
         </div>
     </div>
 
-    <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
+    <div class="btn-row">
+      <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
+      <button class="restart-btn" id="saveReplayBtn">Save Replay <span class="key-hint">.zsr</span></button>
+    </div>
 
     <div class="footer-hint">Push exact opposites together to <b>cancel</b> them</div>
 
@@ -528,6 +530,9 @@
       <h3>Game Over</h3>
       <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
 
+      <h3>Replays</h3>
+      <p>Tap <b>Save Replay</b> any time to download a compact <code>.zsr</code> replay file of the current game so far. Open it in <code>replay.html</code> to step or scroll through every move.</p>
+
       <button class="modal-close" id="closeHelp">Got it</button>
     </div>
   </div>
@@ -540,14 +545,11 @@
   let tileIdCounter = 1;
 
   // ---------------- Deck system ----------------
-  // A continuous queue of {value, boundary} entries. `boundary` marks the
-  // first entry of a freshly shuffled 20-value bag (except the very first
-  // bag of a game, which has nothing before it to mark a boundary against).
   let deck = [];
   let anyBlockGenerated = false;
 
   function newShuffledBlock(){
-    const range = currentMaxValue();  
+    const range = currentMaxValue();
     const block = [];
     for(let v=-range; v<=range; v++){ if(v!==0) block.push(v); }
     for(let i=block.length-1;i>0;i--){
@@ -566,11 +568,6 @@
 
   function removeAt(index){
     const removed = deck.splice(index,1)[0];
-    // If we just removed the marked start-of-bag entry out of turn (only
-    // possible during the sign-specific initial deal skipping ahead of it),
-    // pass the boundary marker on to whatever now occupies that slot.
-    // A plain in-order draw (index 0) should simply consume the marker,
-    // not propagate it forward.
     if(removed && removed.boundary && index > 0 && deck[index] && !deck[index].boundary){
       deck[index].boundary = true;
     }
@@ -597,15 +594,11 @@
   }
 
   // ---------------- state ----------------
-  let tiles = [];   // {id, value, r, c, el}
+  let tiles = [];
   let score = 0;
   let best = 0;
   let busy = false;
 
-  // ---------------- merge mode ----------------
-  // 'zerosum' = cancels + 1/2/3 combine merges. 'nnzm' = cancels only.
-  // Each mode keeps its own save slot and best score so switching never
-  // clobbers the other variant's progress.
   const MODE_KEY = 'zerosum_mode_v1';
   const SAVE_KEYS = { zerosum: 'zerosum_save_v2', nnzm: 'zerosum_save_nnzm_v1' };
   const BEST_KEYS = { zerosum: 'zerosum_best_v2', nnzm: 'zerosum_best_nnzm_v1' };
@@ -630,6 +623,135 @@
   const titleEl = document.getElementById('titleEl');
   let gameOver = false;
 
+  // ================= REPLAY RECORDING =================
+  // replayLog captures everything needed to deterministically reconstruct
+  // the game: the mode, the initial 8-tile deal (position + value, in the
+  // exact order they were dealt), and then for every successful move: the
+  // direction and the resulting random spawn (position + value). A move can
+  // only succeed by freeing at least one cell (via a slide into pre-existing
+  // empty space, or a merge), so a spawn always happens -- no flag needed.
+  let replayLog = null;
+
+  const QUEUE_PREVIEW_LEN = 5; // how many upcoming deck entries the replay records for the "Next" preview
+
+  function resetReplayLog(){
+    replayLog = {
+      mode: mode,
+      initialSpawns: [], // {pos, value}
+      initialQueue: [],   // {value, boundary} snapshot of the preview queue before the first move
+      moves: []           // {dir, spawn: {pos,value}, queue: [{value,boundary}...]}
+    };
+  }
+
+  function posIndex(r,c){ return r*SIZE + c; }
+
+  // Snapshot of the next QUEUE_PREVIEW_LEN deck entries, exactly as shown in
+  // the "Next" preview panel at this instant -- recorded into the replay log
+  // so replay.html can reproduce the preview (including bag dividers)
+  // without having to re-simulate the deck's RNG.
+  function snapshotQueue(){
+    ensureDeck(QUEUE_PREVIEW_LEN);
+    return deck.slice(0, QUEUE_PREVIEW_LEN).map(e => ({ value: e.value, boundary: !!e.boundary }));
+  }
+
+  // ---- bit-level writer ----
+  function BitWriter(){
+    this.bytes = [];
+    this.cur = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.writeBits = function(value, n){
+    for(let i=n-1;i>=0;i--){
+      const bit = (value >> i) & 1;
+      this.cur = (this.cur << 1) | bit;
+      this.nbits++;
+      if(this.nbits === 8){
+        this.bytes.push(this.cur);
+        this.cur = 0;
+        this.nbits = 0;
+      }
+    }
+  };
+  BitWriter.prototype.finish = function(){
+    if(this.nbits > 0){
+      this.cur = this.cur << (8 - this.nbits);
+      this.bytes.push(this.cur);
+      this.cur = 0;
+      this.nbits = 0;
+    }
+    return new Uint8Array(this.bytes);
+  };
+
+  function writeSignedValue(bw, value){
+    // 1 sign bit (1 = negative) + 7 magnitude bits (0-127)
+    bw.writeBits(value < 0 ? 1 : 0, 1);
+    bw.writeBits(Math.abs(value), 7);
+  }
+
+  function writeQueueEntry(bw, entry){
+    // signed value (8 bits) + 1 bag-boundary flag bit
+    writeSignedValue(bw, entry.value);
+    bw.writeBits(entry.boundary ? 1 : 0, 1);
+  }
+
+  const DIR_CODE = { left:0, right:1, up:2, down:3 };
+
+  function encodeReplay(log){
+    const bw = new BitWriter();
+    // magic + version are plain bytes, written first (outside the bit packer)
+    bw.writeBits(log.mode === 'nnzm' ? 1 : 0, 1);
+    for(const s of log.initialSpawns){
+      bw.writeBits(s.pos, 4);
+      writeSignedValue(bw, s.value);
+    }
+    for(const q of log.initialQueue){
+      writeQueueEntry(bw, q);
+    }
+    bw.writeBits(log.moves.length, 24);
+    for(const m of log.moves){
+      bw.writeBits(DIR_CODE[m.dir], 2);
+      bw.writeBits(m.spawn.pos, 4);
+      writeSignedValue(bw, m.spawn.value);
+      for(const q of m.queue){
+        writeQueueEntry(bw, q);
+      }
+    }
+    const payload = bw.finish();
+    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x32]); // "ZSR2" -- v2 adds preview-queue snapshots
+    const out = new Uint8Array(magic.length + payload.length);
+    out.set(magic, 0);
+    out.set(payload, magic.length);
+    return out;
+  }
+
+  function formatUtcStamp(date){
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+      date.getUTCFullYear() +
+      pad(date.getUTCMonth() + 1) +
+      pad(date.getUTCDate()) +
+      pad(date.getUTCHours()) +
+      pad(date.getUTCMinutes()) +
+      pad(date.getUTCSeconds())
+    );
+  }
+
+  function saveReplayFile(){
+    if(!replayLog) return;
+    const bytes = encodeReplay(replayLog);
+    const blob = new Blob([bytes], {type: 'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = formatUtcStamp(new Date());
+    a.href = url;
+    a.download = 'zerosum_' + stamp + '.zsr';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  // ================= END REPLAY RECORDING =================
+
   function occupied(r,c){
     return tiles.find(t => t.r===r && t.c===c);
   }
@@ -642,23 +764,10 @@
     return list;
   }
 
-  // A pair only interacts if they're exact opposites (equal magnitude,
-  // opposite sign) -- they cancel out and vanish. Same-value pairs and
-  // anything else just block each other, no merging.
-  // This strict "cancel-only" check is kept separate (used only for the
-  // initial-deal fairness scan) so that the much more common combine-merges
-  // below don't make it effectively impossible to find a fair starting board.
   function canMerge(a,b){
     return a + b === 0;
   }
 
-  // Full merge evaluation used during real gameplay and move-validity checks.
-  // Returns null if the pair doesn't interact, otherwise:
-  //   { type:'cancel',  scoreGain }         -- exact opposites, both vanish
-  //   { type:'combine', value, scoreGain }  -- one tile is +-1/2/3, fuses into a sum
-  // Combine merges only fire when at least one tile has magnitude <= 3, and
-  // only if the resulting sum doesn't exceed the current maximum tile value
-  // (the same cap that governs the 10k-score bag stepping).
   function evaluateMerge(a, b){
     if(a + b === 0){
       return { type:'cancel', scoreGain: Math.abs(a) * 10 };
@@ -675,7 +784,6 @@
 
   // ---------------- board rendering ----------------
   function cellPixel(){
-    // read computed cell size + gap in px for precise placement
     const rootStyles = getComputedStyle(document.documentElement);
     const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
     const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
@@ -792,7 +900,8 @@
         deck: deck,
         anyBlockGenerated: anyBlockGenerated,
         tileIdCounter: tileIdCounter,
-        gameOver: gameOver
+        gameOver: gameOver,
+        replayLog: replayLog
       };
       localStorage.setItem(saveKeyFor(mode), JSON.stringify(data));
     }catch(e){ /* storage unavailable, ignore */ }
@@ -825,6 +934,8 @@
     tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
     gameOver = !!data.gameOver;
     busy = false;
+    replayLog = data.replayLog || null;
+    if(!replayLog) resetReplayLog();
 
     overlayEl.classList.remove('flash');
     if(gameOver){
@@ -946,6 +1057,7 @@
     deck = [];
     anyBlockGenerated = false;
     buildCellBackgrounds();
+    resetReplayLog();
 
     while(true){
 
@@ -992,23 +1104,31 @@
 
     tiles.forEach(t => createTileEl(t));
 
+    // record the accepted initial deal for the replay log
+    replayLog.mode = mode;
+    replayLog.initialSpawns = tiles.map(t => ({ pos: posIndex(t.r, t.c), value: t.value }));
+    replayLog.initialQueue = snapshotQueue();
+
     renderScores();
     renderPreview();
     saveState();
   }
 
   function spawnRandomTile(){
+    // Called only after a successful move (moved === true). A move can only
+    // succeed by sliding a tile into pre-existing empty space, or by a merge
+    // that frees one up -- either way at least one empty cell always exists
+    // here, so no empty-board guard is needed.
     const empties = emptyCells();
-    if(empties.length===0) return;
     const spot = empties[Math.floor(Math.random()*empties.length)];
     const tile = { id: tileIdCounter++, value: drawValue(), r: spot.r, c: spot.c, el:null };
     tiles.push(tile);
     createTileEl(tile);
+    return tile;
   }
 
   // ---------------- line helpers ----------------
   function getLineCoords(dir){
-    // returns array of 4 lines, each line = array of {r,c} ordered edge-first
     const lines = [];
     if(dir==='left'){
       for(let r=0;r<SIZE;r++){
@@ -1030,9 +1150,7 @@
     return lines;
   }
 
-  // Pure simulation on values only, for game-over detection
   function simulateMoved(values, dir){
-    // values: length-16 array (r*4+c), null or number
     const lines = getLineCoords(dir);
     let moved = false;
     for(const line of lines){
@@ -1108,7 +1226,6 @@
         }
       }
 
-      // write back positions
       for(let idx=0; idx<line.length; idx++){
         const pos = line[idx];
         const t = lineTiles[idx];
@@ -1118,14 +1235,12 @@
 
     if(!moved) return false;
 
-    // update DOM for surviving (unmerged) tiles first, so they slide into place
     tiles.forEach(t => {
       if(removedIds.has(t.id)) return;
       updateTileEl(t);
       if(combinedIds.has(t.id)) pulseTile(t);
     });
 
-    // animate out removed tiles, then clean up
     tiles.forEach(t => {
       if(removedIds.has(t.id)) removeTileEl(t, true);
     });
@@ -1136,7 +1251,13 @@
     renderScores();
     if(scoreGain > 0) bumpScore();
 
-    spawnRandomTile();
+    const spawned = spawnRandomTile();
+    replayLog.moves.push({
+      dir: dir,
+      spawn: { pos: posIndex(spawned.r, spawned.c), value: spawned.value },
+      queue: snapshotQueue()
+    });
+
     if(!hasAnyValidMove()){
       showGameOver();
     }
@@ -1202,14 +1323,12 @@
 
 
   window.addEventListener('resize', () => {
-    // reposition all tiles + backgrounds on resize
     document.querySelectorAll('.cell-bg').forEach((el, idx) => {
       positionEl(el, Math.floor(idx/SIZE), idx%SIZE);
     });
     tiles.forEach(t => positionEl(t.el, t.r, t.c));
   });
 
-  // ---------------- save on exit (extra safety net) ----------------
   window.addEventListener('beforeunload', saveState);
   document.addEventListener('visibilitychange', () => {
     if(document.visibilityState === 'hidden') saveState();
@@ -1225,9 +1344,12 @@
   if(closeHelp) closeHelp.addEventListener('click', dismissHelp);
   if(helpModal) helpModal.addEventListener('click', (e) => { if(e.target === helpModal) dismissHelp(); });
 
-  // ---------------- restart button ----------------
+  // ---------------- restart / replay buttons ----------------
   const restartBtn = document.getElementById('restartBtn');
   if(restartBtn) restartBtn.addEventListener('click', () => newGame());
+
+  const saveReplayBtn = document.getElementById('saveReplayBtn');
+  if(saveReplayBtn) saveReplayBtn.addEventListener('click', () => saveReplayFile());
 
   // ---------------- merge-mode toggle ----------------
   function applyModeVisuals(){
@@ -1244,10 +1366,6 @@
     applyModeVisuals();
     try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
 
-    // Animate the current board out (the same vanish animation used when
-    // tiles cancel during a move), then swap in the new rule-set's board
-    // (or a fresh game) with the same spawn-in animation used for new
-    // tiles during play, instead of an instant silent swap.
     const oldTiles = tiles.slice();
     oldTiles.forEach(t => removeTileEl(t, true));
     tiles = [];
@@ -1292,7 +1410,8 @@
     },
     getScore(){ return score; },
     getMaxValue(){ return currentMaxValue(); },
-    getDeck(){ return deck; }
+    getDeck(){ return deck; },
+    getReplayLog(){ return replayLog; }
   };
 })();
 </script>
