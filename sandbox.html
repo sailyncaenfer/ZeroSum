@@ -426,10 +426,11 @@
           <div class="field"><label for="cfg_spawnCount">Tiles spawned per move</label><input type="number" id="cfg_spawnCount" min="1" max="20" step="1"></div>
           <div class="field"><label for="cfg_multiSpawnChance">Extra-spawn chance<span class="hint">Rolled repeatedly after the base spawn(s)</span></label><input type="range" id="cfg_multiSpawnChance" min="0" max="100" step="1"><span class="range-val" id="val_multiSpawnChance">0%</span></div>
           <div class="field"><label for="cfg_initialTiles">Initial tiles dealt</label><input type="number" id="cfg_initialTiles" min="1" max="100" step="1"></div>
+          <div class="field"><label for="cfg_previewCount">Next tiles shown<span class="hint">Length of the upcoming-tiles preview queue</span></label><input type="number" id="cfg_previewCount" min="0" max="20" step="1"></div>
           <div class="field"><label for="cfg_deckMode">Deck mode</label>
             <select id="cfg_deckMode">
               <option value="bag">Shuffled bag (no repeats)</option>
-              <option value="random">Fully random</option>
+              <option value="random">Fully random (no bag)</option>
             </select>
           </div>
           <div class="field"><label for="cfg_positiveBias">Positive-tile bias<span class="hint">Used for initial deal balance</span></label><input type="range" id="cfg_positiveBias" min="0" max="100" step="1"><span class="range-val" id="val_positiveBias">50%</span></div>
@@ -500,6 +501,7 @@
     spawnCount: 1,
     multiSpawnChance: 0,
     initialTiles: 8,
+    previewCount: 5,
     deckMode: 'bag',
     positiveBias: 0.5,
     valueMinOverrideEnabled: false,
@@ -739,7 +741,7 @@
   }
 
   function renderPreview(){
-    const queuePreviews = 5;
+    const queuePreviews = Math.max(0, Math.round(CONFIG.previewCount));
     if(!previewPanelEl) return;
     ensureDeck(queuePreviews);
     previewPanelEl.innerHTML = '';
@@ -1284,6 +1286,7 @@
           const num = parseFloat(el.value);
           if(!isNaN(num)) CONFIG[key] = num;
         }
+        if(key === 'previewCount') renderPreview();
         renderConfigSummary();
         persistConfig();
       });
@@ -1295,6 +1298,7 @@
     refreshInputsFromConfig();
     persistConfig();
     renderConfigSummary();
+    renderPreview();
   });
 
   refreshInputsFromConfig();
