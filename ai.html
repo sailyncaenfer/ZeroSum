@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ZeroSum</title>
+<style>
+  :root{
+    --bg: #121213;
+    --panel: #1c1c1e;
+    --board: #232326;
+    --cell: #2c2c30;
+    --accent: #e8a33d;
+    --accent-dim: #8a672a;
+    --pos-bg: #0a0a0a;
+    --pos-fg: #f5f5f5;
+    --neg-bg: #f5f5f5;
+    --neg-fg: #0a0a0a;
+    --muted: #77777c;
+    --gap: 1.4vmin;
+    --cellsize: 17vmin;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: var(--bg);
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    display:flex; align-items:flex-start; justify-content:center;
+    min-height:100vh;
+    overflow-y: auto;
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .app{
+    width: min(94vmin, 480px);
+    padding: 2vmin 2vmin 3vmin;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 2vmin;
+  }
+
+  /* ---------- Header (scores only) ---------- */
+  .header{
+    width:100%;
+    display:flex;
+    justify-content:flex-end;
+  }
+  /* ---------- Board column (title always sits directly above the board) ---------- */
+  .board-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.2vmin;
+}
+
+    .board-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 3.6vmin;
+    }
+
+  .title{
+    font-size: 7.6vmin;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.85;
+    position:relative;
+  }
+  .title .zero{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.14vmin #3a3a3a;
+    text-stroke: 0.14vmin #3a3a3a;
+    cursor: default;
+  }
+  .title .sum{
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.14vmin #cfcfcf;
+    text-stroke: 0.14vmin #cfcfcf
+  }
+  .title.nnzm .zero{
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.14vmin #cfcfcf;
+    text-stroke: 0.14vmin #cfcfcf;
+  }
+  .title.nnzm .sum{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.14vmin #3a3a3a;
+    text-stroke: 0.14vmin #3a3a3a;
+  }
+
+  .title-sub{
+    font-size: 1.5vmin;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.4vmin;
+    font-weight: 600;
+  }
+  .scores{
+    display:flex;
+    gap: 1.4vmin;
+  }
+  .score-box{
+    background: var(--panel);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin 2.4vmin;
+    text-align:center;
+    min-width: 15vmin;
+  }
+  .score-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .score-value{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 3vmin;
+    font-weight: 700;
+    color: #f2f2f2;
+    font-variant-numeric: tabular-nums;
+  }
+  .score-value.bump{
+    animation: bump 0.32s ease;
+  }
+  @keyframes bump{
+    0%{ transform: scale(1); color: #f2f2f2; }
+    35%{ transform: scale(1.28); color: var(--accent); }
+    100%{ transform: scale(1); color: #f2f2f2; }
+  }
+
+  /* ---------- Board ---------- */
+  .board-wrap{
+    position:relative;
+    touch-action: none;
+  }
+  .board{
+    position:relative;
+    width: calc(4 * var(--cellsize) + 5 * var(--gap));
+    height: calc(4 * var(--cellsize) + 5 * var(--gap));
+    background: var(--board);
+    border-radius: 2vmin;
+    padding: var(--gap);
+  }
+  .cell-bg{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    background: var(--cell);
+    border-radius: 1.4vmin;
+  }
+  .tile{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    border-radius: 1.4vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 6.4vmin;
+    transition: left 0.13s cubic-bezier(.4,0,.2,1), top 0.13s cubic-bezier(.4,0,.2,1);
+    will-change: left, top, transform;
+    z-index: 2;
+  }
+  .tile.pos{
+    background: var(--pos-bg);
+    color: var(--pos-fg);
+    box-shadow: 0 0 0 1px #2b2b2b inset;
+  }
+  .tile.neg{
+    background: var(--neg-bg);
+    color: var(--neg-fg);
+    box-shadow: 0 0 0 1px #d6d6d6 inset;
+  }
+  .tile.spawn{
+    animation: spawn 0.22s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  @keyframes spawn{
+    0%{ transform: scale(0); opacity:0; }
+    70%{ transform: scale(1.15); opacity:1; }
+    100%{ transform: scale(1); }
+  }
+  .tile.vanish{
+    animation: vanish 0.22s ease both;
+    z-index: 3;
+  }
+  @keyframes vanish{
+    0%{ transform: scale(1) rotate(0deg); opacity:1; }
+    100%{ transform: scale(0) rotate(25deg); opacity:0; }
+  }
+  .tile.shake{
+    animation: shake 0.28s ease;
+  }
+  .tile.pulse{
+    animation: pulse 0.22s cubic-bezier(.4,0,.2,1);
+    z-index: 3;
+  }
+  @keyframes pulse{
+    0%{ transform: scale(1); }
+    45%{ transform: scale(1.18); }
+    100%{ transform: scale(1); }
+  }
+  @keyframes shake{
+    0%,100%{ transform: translateX(0); }
+    25%{ transform: translateX(-1.2vmin); }
+    75%{ transform: translateX(1.2vmin); }
+  }
+
+  /* ---------- Next-tiles preview panel ---------- */
+  .preview-panel{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-top: 0.2vmin;
+    flex-shrink: 0;
+  }
+  .preview-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 1vmin;
+  }
+  .preview-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.3vmin;
+    /* Fixed width = the divider's width (the widest possible child), so the
+       column never resizes depending on whether a bag-separator happens to
+       be visible in the current preview window. Without this, the board
+       (which sits to the left, in a row centered as a whole) would shift
+       left/right as the queue's content changed width. */
+    width: calc(var(--cellsize) * 1.0);
+  }
+
+  .preview-list .preview-divider{
+    margin-top: -0.65vmin;
+    margin-bottom: -0.65vmin;
+  }
+  .preview-tile{
+    width: calc(var(--cellsize) * 0.68);
+    height: calc(var(--cellsize) * 0.68);
+    border-radius: 1.3vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 3.7vmin;
+    flex-shrink: 0;
+  }
+  .preview-tile.pos{
+    background: var(--pos-bg);
+    color: var(--pos-fg);
+    box-shadow: 0 0 0 1px #2b2b2b inset;
+  }
+  .preview-tile.neg{
+    background: var(--neg-bg);
+    color: var(--neg-fg);
+    box-shadow: 0 0 0 1px #d6d6d6 inset;
+  }
+  .preview-divider{
+    width: calc(var(--cellsize) * 1.0);
+    height: 0.18vmin;
+    background: linear-gradient(
+        to right,
+        transparent 0%,
+        white 20%,
+        white 80%,
+        transparent 100%
+    );
+    margin: 0.3vmin 0;
+  }
+
+  /* ---------- Restart / Replay buttons ---------- */
+  .btn-row{
+    display:flex;
+    gap: 1.4vmin;
+  }
+  .restart-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap: 1vmin;
+    background: var(--panel);
+    color: #d8d8d8;
+    border: none;
+    border-radius: 1.4vmin;
+    padding: 1.4vmin 3.4vmin;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1.9vmin;
+    letter-spacing: 0.04em;
+    cursor:pointer;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, transform 0.1s ease;
+  }
+  .restart-btn:hover{
+    color: var(--accent);
+  }
+  .restart-btn:active{
+    transform: scale(0.96);
+  }
+  .restart-btn .key-hint{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 2.6vmin;
+    height: 2.6vmin;
+    padding: 0 0.6vmin;
+    border-radius: 0.7vmin;
+    background: var(--cell);
+    color: var(--muted);
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 1.5vmin;
+    font-weight: 800;
+  }
+
+  /* ---------- AI control bar ---------- */
+  .ai-bar{
+    display:flex;
+    align-items:stretch;
+    gap: 1.2vmin;
+    flex-wrap: wrap;
+    justify-content:center;
+  }
+  .ai-btn{
+    display:flex;
+    align-items:center;
+    gap: 0.8vmin;
+    background: var(--panel);
+    color: #d8d8d8;
+    border: none;
+    border-radius: 1.4vmin;
+    padding: 1.2vmin 2.6vmin;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1.7vmin;
+    letter-spacing: 0.04em;
+    cursor:pointer;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .ai-btn:hover{ color: var(--accent); }
+  .ai-btn:active{ transform: scale(0.96); }
+  .ai-btn.active{
+    background: var(--accent);
+    color: #1a1206;
+  }
+  .ai-btn .ai-btn-state{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    opacity: 0.85;
+  }
+  .ai-config{
+    display:flex;
+    gap: 1vmin;
+  }
+  .ai-field{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    background: var(--panel);
+    border-radius: 1.1vmin;
+    padding: 0.7vmin 1vmin;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+  }
+  .ai-field-label{
+    font-size: 1.15vmin;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 0.4vmin;
+    white-space: nowrap;
+  }
+  .ai-field-input{
+    width: 6.4vmin;
+    background: var(--cell);
+    color: #f2f2f2;
+    border: none;
+    border-radius: 0.7vmin;
+    text-align:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 700;
+    font-size: 1.6vmin;
+    padding: 0.4vmin 0.2vmin;
+  }
+
+  /* ---------- Game over flash (no text, just a red pulse) ---------- */
+  .overlay{
+    position:absolute;
+    inset:0;
+    border-radius: 2vmin;
+    pointer-events:none;
+    background: rgba(220,40,40,0);
+    z-index: 10;
+  }
+  .overlay.flash{
+    animation: gameOverPulse 1s ease-out forwards;
+  }
+  @keyframes gameOverPulse{
+    0%{ background: rgba(220,40,40,0.6); }
+    100%{ background: rgba(220,40,40,0); }
+  }
+
+  /* ---------- Help button ---------- */
+  .help-btn{
+    width: 5.2vmin;
+    height: 5.2vmin;
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    border: none;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 2.6vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    flex-shrink: 0;
+    align-self: center;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .help-btn:active{
+    transform: scale(0.92);
+  }
+  .help-btn:hover{
+    color: var(--accent);
+  }
+
+  /* ---------- Help modal ---------- */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(0,0,0,0.65);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 4vmin;
+    z-index: 100;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity 0.18s ease;
+  }
+  .modal-overlay.open{
+    opacity:1;
+    pointer-events:auto;
+  }
+  .modal{
+    background: var(--panel);
+    border-radius: 2.4vmin;
+    width: min(100%, 460px);
+    max-height: 82vh;
+    overflow-y: auto;
+    padding: 3.6vmin 3.4vmin;
+    transform: translateY(1.2vmin) scale(0.98);
+    transition: transform 0.18s ease;
+  }
+  .modal-overlay.open .modal{
+    transform: translateY(0) scale(1);
+  }
+  .modal h2{
+    margin: 0 0 2vmin;
+    font-size: 3vmin;
+    color: #f2f2f2;
+  }
+  .modal h3{
+    font-size: 1.9vmin;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 2.4vmin 0 0.8vmin;
+  }
+  .modal p, .modal li{
+    font-size: 1.9vmin;
+    line-height: 1.5;
+    color: #cfcfcf;
+    margin: 0.6vmin 0;
+  }
+  .modal ul{
+    margin: 0.6vmin 0;
+    padding-left: 3.4vmin;
+  }
+  .modal .swatch{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width: 3.2vmin;
+    height: 3.2vmin;
+    padding: 0 0.6vmin;
+    border-radius: 0.8vmin;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: 1.7vmin;
+    vertical-align: middle;
+  }
+  .modal .swatch.pos{ background: var(--pos-bg); color: var(--pos-fg); box-shadow: 0 0 0 1px #2b2b2b inset; }
+  .modal .swatch.neg{ background: var(--neg-bg); color: var(--neg-fg); box-shadow: 0 0 0 1px #d6d6d6 inset; }
+  .modal-close{
+    margin-top: 3vmin;
+    width: 100%;
+    padding: 1.6vmin;
+    border: none;
+    border-radius: 1.2vmin;
+    background: var(--accent);
+    color: #1a1206;
+    font-weight: 800;
+    font-size: 1.9vmin;
+    cursor:pointer;
+  }
+
+  .footer-hint{
+    color: var(--muted);
+    font-size: 1.6vmin;
+    letter-spacing: 0.06em;
+    text-align:center;
+  }
+  .footer-hint b{ color:#bbb; }
+
+  /* ---------- AI instant-play (animations off while AI is running) ---------- */
+  body.ai-instant .tile,
+  body.ai-instant .board,
+  body.ai-instant .overlay,
+  body.ai-instant .score-value{
+    transition: none !important;
+    animation: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .tile, .overlay, .overlay-inner, .score-value{ transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="scores">
+        <div class="score-box">
+          <div class="score-label">Score</div>
+          <div class="score-value" id="score">0</div>
+        </div>
+        <div class="score-box">
+          <div class="score-label">Best</div>
+          <div class="score-value" id="best">0</div>
+        </div>
+        <button class="help-btn" id="helpBtn" aria-label="How to play">?</button>
+      </div>
+    </div>
+
+    <div class="board-col">
+        <div class="title" id="titleEl">
+            <span class="zero" id="titleZero">Zero</span><span class="sum" id="titleSum">Sum</span>
+            <div class="title-sub">Cancel Exact Opposites</div>
+        </div>
+
+        <div class="board-row">
+            <div class="board-wrap">
+                <div class="board" id="board"></div>
+                <div class="overlay" id="overlay"></div>
+            </div>
+
+            <div class="preview-panel">
+                <div class="preview-label">Next</div>
+                <div class="preview-list" id="previewPanel"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
+      <button class="restart-btn" id="saveReplayBtn">Save Replay <span class="key-hint">.zsr</span></button>
+    </div>
+
+    <div class="ai-bar">
+      <button class="ai-btn" id="aiToggleBtn" aria-label="Toggle AI auto-play">
+        <span>AI</span><span class="ai-btn-state" id="aiBtnState">Off</span>
+      </button>
+      <div class="ai-config">
+        <label class="ai-field">
+          <span class="ai-field-label">Depth</span>
+          <input type="number" id="aiDepthInput" class="ai-field-input" step="1" value="3">
+        </label>
+        <label class="ai-field">
+          <span class="ai-field-label">Max Time (ms)</span>
+          <input type="number" id="aiMaxTimeInput" class="ai-field-input" step="1" value="1000">
+        </label>
+        <label class="ai-field">
+          <span class="ai-field-label">Min Time (ms)</span>
+          <input type="number" id="aiMinTimeInput" class="ai-field-input" step="1" value="0">
+        </label>
+      </div>
+    </div>
+
+    <div class="footer-hint">Push exact opposites together to <b>cancel</b> them</div>
+
+  </div>
+
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <h2>How ZeroSum Works</h2>
+      <p>Swipe (or use arrow keys / WASD) to slide every tile in one direction. Tiles glide until they hit the edge of the 4&times;4 board or another tile.</p>
+
+      <h3>Tiles</h3>
+      <p><span class="swatch pos">5</span> Black tiles hold <b>positive</b> numbers. <span class="swatch neg">5</span> White tiles hold <b>negative</b> numbers. Every tile is drawn from a shuffled deck of the values &minus;10 through 10 (0 is never dealt on its own), so you'll always see a mix of both colors.</p>
+
+      <h3>Cancelling</h3>
+      <p>When a move pushes two tiles together, they interact only if they're <b>exact opposites</b> &mdash; equal magnitude, mismatched color, like <span class="swatch pos">7</span> and <span class="swatch neg">7</span>. That pair cancels out completely and both tiles vanish from the board.</p>
+
+      <h3>Combining</h3>
+      <p>Small tiles are flexible: any <span class="swatch pos">1</span>, <span class="swatch pos">2</span>, or <span class="swatch pos">3</span> (or its negative) can fuse with whatever tile it's pushed into, as long as the result doesn't exceed the current maximum tile value. The two tiles become one tile holding their sum. Any other pairing &mdash; same value, same color, or unrelated numbers above 3 &mdash; just blocks and stacks up without merging.</p>
+
+      <h3>Scoring</h3>
+      <p>Each cancellation scores <b>10&times;</b> the tile's magnitude &mdash; cancelling a pair of 7s scores 70 points. A combine merge instead scores the magnitude of the smaller tile (1, 2, or 3 points).</p>
+
+      <h3>Next Tiles</h3>
+      <p>The column beside the board previews the next few tiles that will be dealt in. Tiles are drawn from a shuffled bag of every value up to the current maximum (starting at &minus;10 to 10, excluding 0); once a bag runs out, a fresh one is shuffled. A dashed line in the preview marks the start of that next bag.</p>
+
+      <h3>Raising the Ceiling</h3>
+      <p>Every 10,000 points raises the maximum tile value by 1. You'll always finish the bag you're currently drawing from before any bigger tiles start appearing &mdash; the wider range only applies to bags shuffled after that.</p>
+
+      <h3>Game Over</h3>
+      <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
+
+      <h3>AI Auto-Play</h3>
+      <p>The <b>AI</b> button hands control to an expectimax search that looks ahead over its own possible moves and the tile that lands next. It searches iteratively -- depth 1, then 2, then 3, and so on, keeping the best move found so far and going one level deeper each time -- then plays the resulting move immediately.</p>
+      <p>The <b>Depth</b> field is a target, not a hard cap: if the search finishes that depth with time to spare before <b>Min Time</b> has elapsed, it keeps going deeper until that minimum is reached. <b>Max Time</b> is a hard ceiling -- the search always stops and plays its best move so far once that much time has passed, even mid-depth.</p>
+
+      <h3>Replays</h3>
+      <p>Tap <b>Save Replay</b> any time to download a compact <code>.zsr</code> replay file of the current game so far, including any moves played by the AI. Open it in <code>replay.html</code> to step or scroll through every move.</p>
+
+      <button class="modal-close" id="closeHelp">Got it</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  const SIZE = 4;
+  let tileIdCounter = 1;
+
+  // ---------------- Deck system ----------------
+  // A continuous queue of {value, boundary} entries. `boundary` marks the
+  // first entry of a freshly shuffled 20-value bag (except the very first
+  // bag of a game, which has nothing before it to mark a boundary against).
+  let deck = [];
+  let anyBlockGenerated = false;
+
+  function newShuffledBlock(){
+    const range = currentMaxValue();  
+    const block = [];
+    for(let v=-range; v<=range; v++){ if(v!==0) block.push(v); }
+    for(let i=block.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [block[i],block[j]] = [block[j],block[i]];
+    }
+    return block.map((v, idx) => ({ value: v, boundary: idx===0 && anyBlockGenerated }));
+  }
+
+  function ensureDeck(minLen){
+    while(deck.length < minLen){
+      deck.push(...newShuffledBlock());
+      anyBlockGenerated = true;
+    }
+  }
+
+  function removeAt(index){
+    const removed = deck.splice(index,1)[0];
+    // If we just removed the marked start-of-bag entry out of turn (only
+    // possible during the sign-specific initial deal skipping ahead of it),
+    // pass the boundary marker on to whatever now occupies that slot.
+    // A plain in-order draw (index 0) should simply consume the marker,
+    // not propagate it forward.
+    if(removed && removed.boundary && index > 0 && deck[index] && !deck[index].boundary){
+      deck[index].boundary = true;
+    }
+    ensureDeck(4);
+    renderPreview();
+    return removed;
+  }
+
+  function drawValue(){
+    ensureDeck(4);
+    return removeAt(0).value;
+  }
+
+  function drawValueWithSign(wantPositive){
+    ensureDeck(4);
+    let i = 0;
+    while(true){
+      if(i >= deck.length) ensureDeck(deck.length + 1);
+      if((deck[i].value > 0) === wantPositive){
+        return removeAt(i).value;
+      }
+      i++;
+    }
+  }
+
+  // ---------------- state ----------------
+  let tiles = [];   // {id, value, r, c, el}
+  let score = 0;
+  let best = 0;
+  let busy = false;
+  let uiAnimationsEnabled = true; // turned off while the AI is auto-playing
+
+  // ---------------- merge mode ----------------
+  // 'zerosum' = cancels + 1/2/3 combine merges. 'nnzm' = cancels only.
+  // Each mode keeps its own save slot and best score so switching never
+  // clobbers the other variant's progress.
+  const MODE_KEY = 'zerosum_mode_v1';
+  const SAVE_KEYS = { zerosum: 'zerosum_save_v2', nnzm: 'zerosum_save_nnzm_v1' };
+  const BEST_KEYS = { zerosum: 'zerosum_best_v2', nnzm: 'zerosum_best_nnzm_v1' };
+  let mode = 'zerosum';
+  let modeSwitching = false;
+  try{
+    const savedMode = localStorage.getItem(MODE_KEY);
+    if(savedMode === 'zerosum' || savedMode === 'nnzm') mode = savedMode;
+  }catch(e){ /* ignore */ }
+
+  function saveKeyFor(m){ return SAVE_KEYS[m]; }
+  function bestKeyFor(m){ return BEST_KEYS[m]; }
+  function combineEnabled(){ return mode === 'zerosum'; }
+
+  try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
+
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlayEl = document.getElementById('overlay');
+  const previewPanelEl = document.getElementById('previewPanel');
+  const titleEl = document.getElementById('titleEl');
+  let gameOver = false;
+
+  // ================= REPLAY RECORDING =================
+  // replayLog captures everything needed to deterministically reconstruct
+  // the game: the mode, the initial 8-tile deal (position + value, in the
+  // exact order they were dealt), and then for every successful move: the
+  // direction and the resulting random spawn (position + value). A move can
+  // only succeed by freeing at least one cell (via a slide into pre-existing
+  // empty space, or a merge), so a spawn always happens -- no flag needed.
+  // This records moves regardless of source, so AI auto-play moves are
+  // captured exactly like manual ones.
+  let replayLog = null;
+
+  const QUEUE_PREVIEW_LEN = 5; // how many upcoming deck entries the replay records for the "Next" preview
+
+  function resetReplayLog(){
+    replayLog = {
+      mode: mode,
+      initialSpawns: [], // {pos, value}
+      initialQueue: [],   // {value, boundary} snapshot of the preview queue before the first move
+      moves: []           // {dir, spawn: {pos,value}, queue: [{value,boundary}...]}
+    };
+  }
+
+  function posIndex(r,c){ return r*SIZE + c; }
+
+  // Snapshot of the next QUEUE_PREVIEW_LEN deck entries, exactly as shown in
+  // the "Next" preview panel at this instant -- recorded into the replay log
+  // so replay.html can reproduce the preview (including bag dividers)
+  // without having to re-simulate the deck's RNG.
+  function snapshotQueue(){
+    ensureDeck(QUEUE_PREVIEW_LEN);
+    return deck.slice(0, QUEUE_PREVIEW_LEN).map(e => ({ value: e.value, boundary: !!e.boundary }));
+  }
+
+  // ---- bit-level writer ----
+  function BitWriter(){
+    this.bytes = [];
+    this.cur = 0;
+    this.nbits = 0;
+  }
+  BitWriter.prototype.writeBits = function(value, n){
+    for(let i=n-1;i>=0;i--){
+      const bit = (value >> i) & 1;
+      this.cur = (this.cur << 1) | bit;
+      this.nbits++;
+      if(this.nbits === 8){
+        this.bytes.push(this.cur);
+        this.cur = 0;
+        this.nbits = 0;
+      }
+    }
+  };
+  BitWriter.prototype.finish = function(){
+    if(this.nbits > 0){
+      this.cur = this.cur << (8 - this.nbits);
+      this.bytes.push(this.cur);
+      this.cur = 0;
+      this.nbits = 0;
+    }
+    return new Uint8Array(this.bytes);
+  };
+
+  function writeSignedValue(bw, value){
+    // 1 sign bit (1 = negative) + 7 magnitude bits (0-127)
+    bw.writeBits(value < 0 ? 1 : 0, 1);
+    bw.writeBits(Math.abs(value), 7);
+  }
+
+  function writeQueueEntry(bw, entry){
+    // signed value (8 bits) + 1 bag-boundary flag bit
+    writeSignedValue(bw, entry.value);
+    bw.writeBits(entry.boundary ? 1 : 0, 1);
+  }
+
+  const DIR_CODE = { left:0, right:1, up:2, down:3 };
+
+  function encodeReplay(log){
+    const bw = new BitWriter();
+    // magic + version are plain bytes, written first (outside the bit packer)
+    bw.writeBits(log.mode === 'nnzm' ? 1 : 0, 1);
+    for(const s of log.initialSpawns){
+      bw.writeBits(s.pos, 4);
+      writeSignedValue(bw, s.value);
+    }
+    for(const q of log.initialQueue){
+      writeQueueEntry(bw, q);
+    }
+    bw.writeBits(log.moves.length, 24);
+    for(const m of log.moves){
+      bw.writeBits(DIR_CODE[m.dir], 2);
+      bw.writeBits(m.spawn.pos, 4);
+      writeSignedValue(bw, m.spawn.value);
+      for(const q of m.queue){
+        writeQueueEntry(bw, q);
+      }
+    }
+    const payload = bw.finish();
+    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x32]); // "ZSR2" -- v2 adds preview-queue snapshots
+    const out = new Uint8Array(magic.length + payload.length);
+    out.set(magic, 0);
+    out.set(payload, magic.length);
+    return out;
+  }
+
+  function formatUtcStamp(date){
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+      date.getUTCFullYear() +
+      pad(date.getUTCMonth() + 1) +
+      pad(date.getUTCDate()) +
+      pad(date.getUTCHours()) +
+      pad(date.getUTCMinutes()) +
+      pad(date.getUTCSeconds())
+    );
+  }
+
+  function saveReplayFile(){
+    if(!replayLog) return;
+    const bytes = encodeReplay(replayLog);
+    const blob = new Blob([bytes], {type: 'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = formatUtcStamp(new Date());
+    a.href = url;
+    a.download = 'zerosum_' + stamp + '.zsr';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  // ================= END REPLAY RECORDING =================
+
+  function occupied(r,c){
+    return tiles.find(t => t.r===r && t.c===c);
+  }
+
+  function emptyCells(){
+    const list = [];
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      if(!occupied(r,c)) list.push({r,c});
+    }
+    return list;
+  }
+
+  // A pair only interacts if they're exact opposites (equal magnitude,
+  // opposite sign) -- they cancel out and vanish. Same-value pairs and
+  // anything else just block each other, no merging.
+  // This strict "cancel-only" check is kept separate (used only for the
+  // initial-deal fairness scan) so that the much more common combine-merges
+  // below don't make it effectively impossible to find a fair starting board.
+  function canMerge(a,b){
+    return a + b === 0;
+  }
+
+  // Full merge evaluation used during real gameplay and move-validity checks.
+  // Returns null if the pair doesn't interact, otherwise:
+  //   { type:'cancel',  scoreGain }         -- exact opposites, both vanish
+  //   { type:'combine', value, scoreGain }  -- one tile is +-1/2/3, fuses into a sum
+  // Combine merges only fire when at least one tile has magnitude <= 3, and
+  // only if the resulting sum doesn't exceed the current maximum tile value
+  // (the same cap that governs the 10k-score bag stepping).
+  function evaluateMerge(a, b){
+    if(a + b === 0){
+      return { type:'cancel', scoreGain: Math.abs(a) * 10 };
+    }
+    if(!combineEnabled()) return null;
+    if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= currentMaxValue()){
+        return { type:'combine', value: sum, scoreGain: Math.min(Math.abs(a), Math.abs(b)) };
+      }
+    }
+    return null;
+  }
+
+  // ---------------- board rendering ----------------
+  function cellPixel(){
+    // read computed cell size + gap in px for precise placement
+    const rootStyles = getComputedStyle(document.documentElement);
+    const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+    const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
+    const gap = parseFloat(rootStyles.getPropertyValue('--gap')) * vmin;
+    return {cell, gap};
+  }
+
+  function positionEl(el, r, c){
+    const {cell, gap} = cellPixel();
+    const left = gap + c * (cell + gap);
+    const top = gap + r * (cell + gap);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  }
+
+  function buildCellBackgrounds(){
+    for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+      const bg = document.createElement('div');
+      bg.className = 'cell-bg';
+      positionEl(bg, r, c);
+      bg.dataset.bg = '1';
+      boardEl.appendChild(bg);
+    }
+  }
+
+  function fontSizeClassFor(value){
+    return '';
+  }
+
+  function createTileEl(tile, skipAnim){
+    if(!uiAnimationsEnabled) skipAnim = true;
+    const el = document.createElement('div');
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + (skipAnim ? '' : ' spawn') + ' ' + fontSizeClassFor(tile.value);
+    el.textContent = Math.abs(tile.value);
+    positionEl(el, tile.r, tile.c);
+    boardEl.appendChild(el);
+    tile.el = el;
+    if(!skipAnim){
+      el.addEventListener('animationend', () => {
+        el.classList.remove('spawn');
+      }, {once:true});
+    }
+    return el;
+  }
+
+  function updateTileEl(tile){
+    const el = tile.el;
+    el.textContent = Math.abs(tile.value);
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + ' ' + fontSizeClassFor(tile.value);
+    positionEl(el, tile.r, tile.c);
+  }
+
+  function pulseTile(tile){
+    if(!uiAnimationsEnabled) return;
+    const el = tile.el;
+    if(!el) return;
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+    el.addEventListener('animationend', () => {
+      el.classList.remove('pulse');
+    }, {once:true});
+  }
+
+  function removeTileEl(tile, animate){
+    if(!uiAnimationsEnabled) animate = false;
+    const el = tile.el;
+    if(!el) return;
+    if(animate){
+      el.classList.add('vanish');
+      el.addEventListener('animationend', () => { el.remove(); }, {once:true});
+    } else {
+      el.remove();
+    }
+  }
+
+  function renderScores(){
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+  }
+
+  function bumpScore(){
+    scoreEl.classList.remove('bump');
+    void scoreEl.offsetWidth;
+    scoreEl.classList.add('bump');
+  }
+
+  // ---------------- next-tiles preview ----------------
+  function renderPreview(){
+    const queuePreviews = 5;
+    if(!previewPanelEl) return;
+    ensureDeck(queuePreviews);
+    previewPanelEl.innerHTML = '';
+    for(let i=0;i<queuePreviews;i++){
+      const entry = deck[i];
+      if(!entry) continue;
+      if(entry.boundary){
+        const div = document.createElement('div');
+        div.className = 'preview-divider';
+        previewPanelEl.appendChild(div);
+      }
+      const el = document.createElement('div');
+      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg');
+      el.textContent = Math.abs(entry.value);
+      previewPanelEl.appendChild(el);
+    }
+  }
+
+  // ---------------- persistence ----------------
+  function saveState(){
+    try{
+      const data = {
+        v: 2,
+        tiles: tiles.map(t => ({ id:t.id, value:t.value, r:t.r, c:t.c })),
+        score: score,
+        best: best,
+        deck: deck,
+        anyBlockGenerated: anyBlockGenerated,
+        tileIdCounter: tileIdCounter,
+        gameOver: gameOver,
+        replayLog: replayLog
+      };
+      localStorage.setItem(saveKeyFor(mode), JSON.stringify(data));
+    }catch(e){ /* storage unavailable, ignore */ }
+  }
+
+  function clearSavedState(){
+    try{ localStorage.removeItem(saveKeyFor(mode)); }catch(e){}
+  }
+
+  function loadState(){
+    let data;
+    try{
+      const raw = localStorage.getItem(saveKeyFor(mode));
+      if(!raw) return false;
+      data = JSON.parse(raw);
+    }catch(e){ return false; }
+
+    if(!data || data.v !== 2 || !Array.isArray(data.tiles) || !Array.isArray(data.deck)) return false;
+
+    boardEl.innerHTML = '';
+    buildCellBackgrounds();
+
+    tiles = data.tiles.map(t => ({ id:t.id, value:t.value, r:t.r, c:t.c, el:null }));
+    tiles.forEach(t => createTileEl(t, true));
+
+    score = data.score || 0;
+    best = Math.max(best, data.best || 0);
+    deck = data.deck.slice();
+    anyBlockGenerated = !!data.anyBlockGenerated;
+    tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
+    gameOver = !!data.gameOver;
+    busy = false;
+    replayLog = data.replayLog || null;
+    if(!replayLog) resetReplayLog();
+
+    overlayEl.classList.remove('flash');
+    if(gameOver){
+      void overlayEl.offsetWidth;
+      overlayEl.classList.add('flash');
+    }
+
+    renderScores();
+    renderPreview();
+    return true;
+  }
+
+  function currentMaxValue(){
+    return 10 + Math.floor(score / 10000);
+  }
+
+  function valuesToBoard(values){
+    const board = [];
+    for(let r = 0; r < SIZE; r++){
+        board[r] = [];
+        for(let c = 0; c < SIZE; c++){
+            board[r][c] = values[r * SIZE + c];
+        }
+    }
+    return board;
+}
+
+  function boardToKey(values){
+      return values.map(v => v === null ? "." : v).join(",");
+  }
+
+  function simulateBoard(values, dir){
+      const board = values.slice();
+      const lines = getLineCoords(dir);
+
+      let moved = false;
+      let merged = false;
+
+      for(const line of lines){
+          const arr = line.map(p => board[p.r * SIZE + p.c]);
+          const mergedInto = new Array(arr.length).fill(false);
+
+          for(let i = 0; i < arr.length - 1; i++){
+              if(arr[i + 1] == null)
+                  continue;
+
+              if(arr[i] == null){
+                  arr[i] = arr[i + 1];
+                  arr[i + 1] = null;
+                  moved = true;
+                  i = Math.max(-1, i - 2);
+              }
+              else if(!mergedInto[i] && canMerge(arr[i], arr[i + 1])){
+                  arr[i] = null;
+                  arr[i + 1] = null;
+                  mergedInto[i] = true;
+                  merged = true;
+                  moved = true;
+              }
+          }
+
+          for(let i = 0; i < line.length; i++){
+              const p = line[i];
+              board[p.r * SIZE + p.c] = arr[i];
+          }
+      }
+
+      return { board, moved, merged };
+  }
+
+  function mergeWithinDepth(startValues, depth){
+      const queue = [{
+          board: startValues,
+          depth: 0
+      }];
+
+      const visited = new Set();
+
+      while(queue.length){
+          const cur = queue.shift();
+
+          const key = boardToKey(cur.board);
+
+          if(visited.has(key))
+              continue;
+
+          visited.add(key);
+
+          if(cur.depth >= depth)
+              continue;
+
+          for(const dir of ["left", "right", "up", "down"]){
+
+              const result = simulateBoard(cur.board, dir);
+
+              if(result.merged)
+                  return true;
+
+              if(result.moved){
+                  queue.push({
+                      board: result.board,
+                      depth: cur.depth + 1
+                  });
+              }
+          }
+      }
+
+      return false;
+  }
+
+  // ---------------- init ----------------
+  function newGame(){
+    boardEl.innerHTML = '';
+    tiles = [];
+    score = 0;
+    busy = false;
+    gameOver = false;
+    overlayEl.classList.remove('flash');
+    deck = [];
+    anyBlockGenerated = false;
+    buildCellBackgrounds();
+    resetReplayLog();
+
+    while(true){
+
+      tiles = [];
+      const empties = [];
+
+      for(let r = 0; r < SIZE; r++)
+          for(let c = 0; c < SIZE; c++)
+              empties.push({ r, c });
+
+      const signs = [true, true, true, true, false, false, false, false];
+
+      for(let i = signs.length - 1; i > 0; i--){
+          const j = Math.floor(Math.random() * (i + 1));
+          [signs[i], signs[j]] = [signs[j], signs[i]];
+      }
+
+      for(let i = 0; i < 8; i++){
+
+          const idx = Math.floor(Math.random() * empties.length);
+          const spot = empties.splice(idx, 1)[0];
+
+          tiles.push({
+              id: tileIdCounter++,
+              value: drawValueWithSign(signs[i]),
+              r: spot.r,
+              c: spot.c,
+              el: null
+          });
+      }
+
+      const values = new Array(SIZE * SIZE).fill(null);
+
+      for(const t of tiles)
+          values[t.r * SIZE + t.c] = t.value;
+
+      if(!mergeWithinDepth(values, 5))
+          break;
+
+      // Reject this opening and restore the deck.
+      deck = [];
+      anyBlockGenerated = false;
+  }
+
+    tiles.forEach(t => createTileEl(t));
+
+    // record the accepted initial deal for the replay log
+    replayLog.mode = mode;
+    replayLog.initialSpawns = tiles.map(t => ({ pos: posIndex(t.r, t.c), value: t.value }));
+    replayLog.initialQueue = snapshotQueue();
+
+    renderScores();
+    renderPreview();
+    saveState();
+  }
+
+  function spawnRandomTile(){
+    // Called only after a successful move (moved === true). A move can only
+    // succeed by sliding a tile into pre-existing empty space, or by a merge
+    // that frees one up -- either way at least one empty cell always exists
+    // here, so no empty-board guard is needed.
+    const empties = emptyCells();
+    const spot = empties[Math.floor(Math.random()*empties.length)];
+    const tile = { id: tileIdCounter++, value: drawValue(), r: spot.r, c: spot.c, el:null };
+    tiles.push(tile);
+    createTileEl(tile);
+    return tile;
+  }
+
+  // ---------------- line helpers ----------------
+  function getLineCoords(dir){
+    // returns array of 4 lines, each line = array of {r,c} ordered edge-first
+    const lines = [];
+    if(dir==='left'){
+      for(let r=0;r<SIZE;r++){
+        const line=[]; for(let c=0;c<SIZE;c++) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='right'){
+      for(let r=0;r<SIZE;r++){
+        const line=[]; for(let c=SIZE-1;c>=0;c--) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='up'){
+      for(let c=0;c<SIZE;c++){
+        const line=[]; for(let r=0;r<SIZE;r++) line.push({r,c}); lines.push(line);
+      }
+    } else if(dir==='down'){
+      for(let c=0;c<SIZE;c++){
+        const line=[]; for(let r=SIZE-1;r>=0;r--) line.push({r,c}); lines.push(line);
+      }
+    }
+    return lines;
+  }
+
+  // Pure simulation on values only, for game-over detection
+  function simulateMoved(values, dir){
+    // values: length-16 array (r*4+c), null or number
+    const lines = getLineCoords(dir);
+    let moved = false;
+    for(const line of lines){
+      const arr = line.map(p => values[p.r*SIZE+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]===null || arr[i+1]===undefined) continue;
+        if(arr[i]===null || arr[i]===undefined){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i]){
+          const result = evaluateMerge(arr[i], arr[i+1]);
+          if(result){
+            arr[i] = result.type === 'combine' ? result.value : null;
+            arr[i+1] = null;
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+    }
+    return moved;
+  }
+
+  function boardValues(){
+    const values = new Array(SIZE*SIZE).fill(null);
+    tiles.forEach(t => { values[t.r*SIZE+t.c] = t.value; });
+    return values;
+  }
+
+  function hasAnyValidMove(){
+    const values = boardValues();
+    return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
+  }
+
+  // ---------------- real move (with tile objects) ----------------
+  function doMove(dir){
+    if(busy) return;
+    const lines = getLineCoords(dir);
+    let moved = false;
+    let scoreGain = 0;
+    const removedIds = new Set();
+    const combinedIds = new Set();
+
+    for(const line of lines){
+      const lineTiles = line.map(p => occupied(p.r, p.c) || null);
+      const mergedInto = new Array(lineTiles.length).fill(false);
+
+      for(let i=0;i<lineTiles.length-1;i++){
+        if(!lineTiles[i+1]) continue;
+        if(!lineTiles[i]){
+          lineTiles[i] = lineTiles[i+1];
+          lineTiles[i+1] = null;
+          moved = true;
+        } else if(!mergedInto[i]){
+          const a = lineTiles[i], b = lineTiles[i+1];
+          const result = evaluateMerge(a.value, b.value);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              removedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i] = null;
+              lineTiles[i+1] = null;
+            } else {
+              a.value = result.value;
+              combinedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i+1] = null;
+            }
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+
+      // write back positions
+      for(let idx=0; idx<line.length; idx++){
+        const pos = line[idx];
+        const t = lineTiles[idx];
+        if(t){ t.r = pos.r; t.c = pos.c; }
+      }
+    }
+
+    if(!moved) return false;
+
+    // update DOM for surviving (unmerged) tiles first, so they slide into place
+    tiles.forEach(t => {
+      if(removedIds.has(t.id)) return;
+      updateTileEl(t);
+      if(combinedIds.has(t.id)) pulseTile(t);
+    });
+
+    // animate out removed tiles, then clean up
+    tiles.forEach(t => {
+      if(removedIds.has(t.id)) removeTileEl(t, true);
+    });
+    tiles = tiles.filter(t => !removedIds.has(t.id));
+
+    score += scoreGain;
+    if(score > best){ best = score; try{ localStorage.setItem(bestKeyFor(mode), String(best)); }catch(e){} }
+    renderScores();
+    if(scoreGain > 0) bumpScore();
+
+    const spawned = spawnRandomTile();
+    replayLog.moves.push({
+      dir: dir,
+      spawn: { pos: posIndex(spawned.r, spawned.c), value: spawned.value },
+      queue: snapshotQueue()
+    });
+
+    if(!hasAnyValidMove()){
+      showGameOver();
+    }
+    saveState();
+
+    return true;
+  }
+
+  function showGameOver(){
+    gameOver = true;
+    overlayEl.classList.remove('flash');
+    void overlayEl.offsetWidth;
+    overlayEl.classList.add('flash');
+  }
+
+  function shakeBoard(){
+    if(!uiAnimationsEnabled) return;
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth;
+    boardEl.classList.add('shake');
+  }
+
+  // ================= AI (expectimax) =================
+  // The AI operates purely on plain value arrays (length 16, null = empty),
+  // mirroring doMove()'s line-merge logic but without touching DOM/tile
+  // objects, so a search can explore thousands of hypothetical boards
+  // cheaply. Note that unlike a typical 2048 AI, the *value* of the next
+  // spawned tile isn't random here -- it's the next entry already sitting
+  // in the shuffled deck (that's what the "Next" preview shows). Only the
+  // empty cell it lands in is random, so the chance node only branches
+  // over placement, not over value, which keeps the search both cheaper
+  // and more accurate than guessing at a value distribution.
+  const DIRS = ['left', 'right', 'up', 'down'];
+  const AI_CHANCE_SAMPLE_CAP = 6; // cap chance-node branching for speed
+
+  function evaluateMergeAI(a, b, maxVal, combineOn){
+    if(a + b === 0) return { type:'cancel', scoreGain: Math.abs(a) * 10 };
+    if(!combineOn) return null;
+    if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= maxVal){
+        return { type:'combine', value: sum, scoreGain: Math.min(Math.abs(a), Math.abs(b)) };
+      }
+    }
+    return null;
+  }
+
+  function simulateMoveValues(values, dir, maxVal, combineOn){
+    const lines = getLineCoords(dir);
+    const board = values.slice();
+    let moved = false;
+    let scoreGain = 0;
+    for(const line of lines){
+      const arr = line.map(p => board[p.r*SIZE+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]==null) continue;
+        if(arr[i]==null){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i]){
+          const result = evaluateMergeAI(arr[i], arr[i+1], maxVal, combineOn);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){ arr[i] = null; arr[i+1] = null; }
+            else { arr[i] = result.value; arr[i+1] = null; }
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+      for(let i=0;i<line.length;i++){
+        const p = line[i];
+        board[p.r*SIZE+p.c] = arr[i];
+      }
+    }
+    return { board, moved, scoreGain };
+  }
+
+  // Rewards open space and pairs that are already adjacent and ready to
+  // cancel (the big scoring event) or combine, and lightly penalizes
+  // clutter of large-magnitude tiles.
+  function boardHeuristic(values, combineOn){
+    let emptyCount = 0, cancelPotential = 0, combinePotential = 0, sumAbs = 0;
+    for(let i=0;i<values.length;i++){
+      const v = values[i];
+      if(v == null){ emptyCount++; continue; }
+      sumAbs += Math.abs(v);
+    }
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const v = values[r*SIZE+c];
+        if(v == null) continue;
+        if(c < SIZE-1){
+          const w = values[r*SIZE+c+1];
+          if(w != null){
+            if(v+w===0) cancelPotential++;
+            else if(combineOn && (Math.abs(v)<=3 || Math.abs(w)<=3)) combinePotential++;
+          }
+        }
+        if(r < SIZE-1){
+          const w = values[(r+1)*SIZE+c];
+          if(w != null){
+            if(v+w===0) cancelPotential++;
+            else if(combineOn && (Math.abs(v)<=3 || Math.abs(w)<=3)) combinePotential++;
+          }
+        }
+      }
+    }
+    return emptyCount*8 + cancelPotential*25 + combinePotential*6 - sumAbs*0.1;
+  }
+
+  // Player ("max") node: try every direction, take the best.
+  function expectimaxMax(values, depth, ctx){
+    if(depth <= 0){
+      return boardHeuristic(values, ctx.combineOn);
+    }
+    let best = -Infinity;
+    let any = false;
+    for(const dir of DIRS){
+      const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
+      if(!moved) continue;
+      any = true;
+      const val = scoreGain + expectimaxChance(board, depth, ctx);
+      if(val > best) best = val;
+    }
+    if(!any) return boardHeuristic(values, ctx.combineOn) - 1000; // no moves = dead end, avoid it
+    return best;
+  }
+
+  // Chance node: the next tile's value is already known (front of the
+  // deck); only its landing cell is random. Sample a bounded subset of
+  // empty cells when there are many, to keep branching factor in check.
+  function expectimaxChance(values, depth, ctx){
+    const empties = [];
+    for(let i=0;i<values.length;i++) if(values[i] == null) empties.push(i);
+    if(empties.length === 0) return expectimaxMax(values, depth-1, ctx);
+
+    let sample = empties;
+    if(sample.length > AI_CHANCE_SAMPLE_CAP){
+      const step = sample.length / AI_CHANCE_SAMPLE_CAP;
+      const picked = [];
+      for(let k=0;k<AI_CHANCE_SAMPLE_CAP;k++) picked.push(sample[Math.floor(k*step)]);
+      sample = picked;
+    }
+
+    let total = 0;
+    for(const idx of sample){
+      const board2 = values.slice();
+      board2[idx] = ctx.nextValue;
+      total += expectimaxMax(board2, depth-1, ctx);
+    }
+    return total / sample.length;
+  }
+
+  // Returns the best direction to play, or null if no move is legal.
+  // Iterative deepening: search depth 1 first and remember its answer, then
+  // try depth 2, 3, ... replacing the answer each time a deeper search
+  // finishes. `targetDepth` is a soft target -- once it's reached, the search
+  // keeps deepening further as long as `minTimeMs` hasn't elapsed yet.
+  // `maxTimeMs` is a hard ceiling: the search stops and returns its best
+  // answer so far as soon as that much time has passed, even mid-depth.
+  function pickBestMove(targetDepth, minTimeMs, maxTimeMs){
+    ensureDeck(1);
+    const values = boardValues();
+    const ctx = {
+      maxVal: currentMaxValue(),
+      combineOn: combineEnabled(),
+      nextValue: deck[0].value
+    };
+
+    const startTime = performance.now();
+    const elapsed = () => performance.now() - startTime;
+
+    let bestDir = null;
+    let depth = 1;
+
+    while(true){
+      let depthBestDir = null, depthBestScore = -Infinity;
+      for(const dir of DIRS){
+        const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
+        if(!moved) continue;
+        const val = scoreGain + expectimaxChance(board, depth-1, ctx);
+        if(val > depthBestScore){ depthBestScore = val; depthBestDir = dir; }
+        if(elapsed() >= maxTimeMs) break; // bail mid-depth once the hard ceiling is hit
+      }
+
+      if(depthBestDir !== null) bestDir = depthBestDir;
+
+      const outOfTime = elapsed() >= maxTimeMs;
+      const reachedTargetDepth = depth >= targetDepth;
+      const shouldKeepGoing = !outOfTime && (!reachedTargetDepth || elapsed() < minTimeMs);
+
+      if(!shouldKeepGoing) break;
+      depth++;
+    }
+
+    return bestDir;
+  }
+
+  // ---------------- AI controls (UI + pacing loop) ----------------
+  const aiToggleBtn = document.getElementById('aiToggleBtn');
+  const aiBtnState = document.getElementById('aiBtnState');
+  const aiDepthInput = document.getElementById('aiDepthInput');
+  const aiMaxTimeInput = document.getElementById('aiMaxTimeInput');
+  const aiMinTimeInput = document.getElementById('aiMinTimeInput');
+  const AI_CONFIG_KEY = 'zerosum_ai_config_v2';
+
+  let aiEnabled = false;
+  let aiTimer = null;
+
+  function aiConfig(){
+    let depth = parseInt(aiDepthInput && aiDepthInput.value, 10);
+    if(!Number.isFinite(depth)) depth = 3;
+
+    let maxTime = parseFloat(aiMaxTimeInput && aiMaxTimeInput.value);
+    if(!Number.isFinite(maxTime)) maxTime = 1000;
+
+    let minTime = parseFloat(aiMinTimeInput && aiMinTimeInput.value);
+    if(!Number.isFinite(minTime)) minTime = 0;
+
+    return { depth, maxTime, minTime };
+  }
+
+  function reflectAiConfig(){
+    const cfg = aiConfig();
+    if(aiDepthInput) aiDepthInput.value = cfg.depth;
+    if(aiMaxTimeInput) aiMaxTimeInput.value = cfg.maxTime;
+    if(aiMinTimeInput) aiMinTimeInput.value = cfg.minTime;
+  }
+
+  function saveAiConfig(){
+    try{ localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(aiConfig())); }catch(e){}
+  }
+
+  function loadAiConfig(){
+    try{
+      const raw = localStorage.getItem(AI_CONFIG_KEY);
+      if(!raw) return;
+      const data = JSON.parse(raw);
+      if(!data) return;
+      if(Number.isFinite(data.depth) && aiDepthInput) aiDepthInput.value = data.depth;
+      if(Number.isFinite(data.maxTime) && aiMaxTimeInput) aiMaxTimeInput.value = data.maxTime;
+      if(Number.isFinite(data.minTime) && aiMinTimeInput) aiMinTimeInput.value = data.minTime;
+    }catch(e){ /* ignore */ }
+  }
+
+  function setAiEnabled(on){
+    aiEnabled = on;
+    uiAnimationsEnabled = !on;
+    document.body.classList.toggle('ai-instant', on);
+    if(aiToggleBtn) aiToggleBtn.classList.toggle('active', on);
+    if(aiBtnState) aiBtnState.textContent = on ? 'On' : 'Off';
+    if(aiTimer){ clearTimeout(aiTimer); aiTimer = null; }
+    if(on) scheduleAiMove(30);
+  }
+
+  function scheduleAiMove(delay){
+    if(!aiEnabled) return;
+    if(aiTimer) clearTimeout(aiTimer);
+    aiTimer = setTimeout(runAiMove, delay == null ? 30 : delay);
+  }
+
+  function runAiMove(){
+    if(!aiEnabled) return;
+    // Wait out anything that should hold off play: mid-move animation,
+    // the mode-switch transition, the game-over state, or the help modal.
+    if(busy || gameOver || (helpModal && helpModal.classList.contains('open'))){
+      scheduleAiMove(120);
+      return;
+    }
+    const { depth, maxTime, minTime } = aiConfig();
+    const dir = pickBestMove(depth, minTime, maxTime);
+    if(!dir){
+      // No legal move -- the game is effectively over; stop spinning.
+      setAiEnabled(false);
+      return;
+    }
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+    scheduleAiMove(30);
+  }
+
+  if(aiToggleBtn) aiToggleBtn.addEventListener('click', () => setAiEnabled(!aiEnabled));
+  if(aiDepthInput){
+    aiDepthInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
+  }
+  if(aiMaxTimeInput){
+    aiMaxTimeInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
+  }
+  if(aiMinTimeInput){
+    aiMinTimeInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
+  }
+  loadAiConfig();
+  reflectAiConfig();
+
+  // ---------------- input ----------------
+  const KEY_DIR = {
+    ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+    a:'left', d:'right', w:'up', s:'down'
+  };
+  window.addEventListener('keydown', (e) => {
+    const targetTag = (e.target && e.target.tagName) || '';
+    if(targetTag === 'INPUT' || targetTag === 'TEXTAREA') return;
+    if(e.key === 'r' || e.key === 'R'){
+      e.preventDefault();
+      newGame();
+      return;
+    }
+    const dir = KEY_DIR[e.key];
+    if(!dir) return;
+    e.preventDefault();
+    if(gameOver) return;
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:false});
+
+  let touchStart = null;
+  boardEl.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    touchStart = {x:t.clientX, y:t.clientY};
+  }, {passive:true});
+  boardEl.addEventListener('touchend', (e) => {
+    if(!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    touchStart = null;
+    if(Math.abs(dx) < 24 && Math.abs(dy) < 24){
+      if(gameOver) newGame();
+      return;
+    }
+    if(gameOver) return;
+    let dir;
+    if(Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
+    else dir = dy > 0 ? 'down' : 'up';
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:true});
+
+
+  window.addEventListener('resize', () => {
+    // reposition all tiles + backgrounds on resize
+    document.querySelectorAll('.cell-bg').forEach((el, idx) => {
+      positionEl(el, Math.floor(idx/SIZE), idx%SIZE);
+    });
+    tiles.forEach(t => positionEl(t.el, t.r, t.c));
+  });
+
+  // ---------------- save on exit (extra safety net) ----------------
+  window.addEventListener('beforeunload', saveState);
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'hidden') saveState();
+  });
+
+  // ---------------- help modal ----------------
+  const helpBtn = document.getElementById('helpBtn');
+  const helpModal = document.getElementById('helpModal');
+  const closeHelp = document.getElementById('closeHelp');
+  function openHelp(){ helpModal.classList.add('open'); }
+  function dismissHelp(){ helpModal.classList.remove('open'); }
+  if(helpBtn) helpBtn.addEventListener('click', openHelp);
+  if(closeHelp) closeHelp.addEventListener('click', dismissHelp);
+  if(helpModal) helpModal.addEventListener('click', (e) => { if(e.target === helpModal) dismissHelp(); });
+
+  // ---------------- restart / replay buttons ----------------
+  const restartBtn = document.getElementById('restartBtn');
+  if(restartBtn) restartBtn.addEventListener('click', () => newGame());
+
+  const saveReplayBtn = document.getElementById('saveReplayBtn');
+  if(saveReplayBtn) saveReplayBtn.addEventListener('click', () => saveReplayFile());
+
+  // ---------------- merge-mode toggle ----------------
+  function applyModeVisuals(){
+    if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
+  }
+
+  function switchMode(newMode){
+    if(newMode === mode || modeSwitching) return;
+    modeSwitching = true;
+    busy = true;
+
+    mode = newMode;
+    try{ localStorage.setItem(MODE_KEY, mode); }catch(e){}
+    applyModeVisuals();
+    try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
+
+    // Animate the current board out (the same vanish animation used when
+    // tiles cancel during a move), then swap in the new rule-set's board
+    // (or a fresh game) with the same spawn-in animation used for new
+    // tiles during play, instead of an instant silent swap.
+    const oldTiles = tiles.slice();
+    oldTiles.forEach(t => removeTileEl(t, true));
+    tiles = [];
+
+    const outDelay = (uiAnimationsEnabled && oldTiles.length) ? 220 : 0;
+    setTimeout(() => {
+      if(!loadState()) newGame();
+      if(uiAnimationsEnabled){
+        tiles.forEach(t => {
+          const el = t.el;
+          if(!el || el.classList.contains('spawn')) return;
+          el.classList.add('spawn');
+          el.addEventListener('animationend', () => {
+            el.classList.remove('spawn');
+          }, {once:true});
+        });
+      }
+      busy = false;
+      modeSwitching = false;
+    }, outDelay);
+  }
+
+  const titleZeroEl = document.getElementById('titleZero');
+  const titleSumEl = document.getElementById('titleSum');
+  if(titleZeroEl){
+    titleZeroEl.addEventListener('click', () => switchMode('nnzm'));
+  }
+  if(titleSumEl){
+    titleSumEl.addEventListener('click', () => switchMode('zerosum'));
+  }
+
+  applyModeVisuals();
+  if(!loadState()) newGame();
+
+  // ---------------- debug hook (remove before shipping) ----------------
+  window.debug = {
+    setScore(v){
+      score = v;
+      if(score > best){ best = score; try{ localStorage.setItem(bestKeyFor(mode), String(best)); }catch(e){} }
+      renderScores();
+      renderPreview();
+      saveState();
+      console.log('score set to', score, '- current max tile value:', currentMaxValue());
+    },
+    getScore(){ return score; },
+    getMaxValue(){ return currentMaxValue(); },
+    getDeck(){ return deck; },
+    getReplayLog(){ return replayLog; }
+  };
+})();
+</script>
+</body>
+</html>

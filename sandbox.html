@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>ZeroSum — Sandbox</title>
+<style>
+  :root{
+    --bg: #121213;
+    --panel: #1c1c1e;
+    --panel2: #222225;
+    --board: #232326;
+    --cell: #2c2c30;
+    --accent: #e8a33d;
+    --accent-dim: #8a672a;
+    --pos-bg: #0a0a0a;
+    --pos-fg: #f5f5f5;
+    --neg-bg: #f5f5f5;
+    --neg-fg: #0a0a0a;
+    --muted: #77777c;
+    --border: #333336;
+    --gap: 1.4vmin;
+    --cellsize: 17vmin;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: var(--bg);
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    display:flex; align-items:flex-start; justify-content:center;
+    min-height:100vh;
+    overflow-y: auto;
+    touch-action: pan-y;
+    user-select: none;
+  }
+  .app{
+    width: min(94vmin, 480px);
+    padding: 2vmin 2vmin 3vmin;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.6vmin;
+  }
+
+  /* ---------- Header ---------- */
+  .header{
+    width:100%;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap: 1vmin;
+  }
+  .scores{
+    display:flex;
+    gap: 1.4vmin;
+  }
+  .score-box{
+    background: var(--panel);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin 2.4vmin;
+    text-align:center;
+    min-width: 15vmin;
+  }
+  .score-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .score-value{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 3vmin;
+    font-weight: 700;
+    color: #f2f2f2;
+    font-variant-numeric: tabular-nums;
+  }
+  .score-value.bump{ animation: bump 0.32s ease; }
+  @keyframes bump{
+    0%{ transform: scale(1); color: #f2f2f2; }
+    35%{ transform: scale(1.28); color: var(--accent); }
+    100%{ transform: scale(1); color: #f2f2f2; }
+  }
+  .icon-btn{
+    width: 5.2vmin;
+    height: 5.2vmin;
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--muted);
+    border: none;
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 2.4vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    flex-shrink: 0;
+    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, transform 0.1s ease;
+  }
+  .icon-btn:hover{ color: var(--accent); }
+  .icon-btn:active{ transform: scale(0.92); }
+
+  /* ---------- Board column ---------- */
+  .board-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1vmin;
+  }
+  .title{
+    font-size: 5.6vmin;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.9;
+  }
+  .title .zero{ color: var(--neg-bg); -webkit-text-stroke: 0.14vmin #3a3a3a; }
+  .title .sum{ color: var(--pos-bg); -webkit-text-stroke: 0.14vmin #cfcfcf; }
+  .title-sub{
+    font-size: 1.5vmin;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.3vmin;
+    font-weight: 600;
+  }
+
+  .board-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 3.2vmin;
+  }
+
+  .board-wrap{
+    position:relative;
+    touch-action: none;
+  }
+  .board{
+    position:relative;
+    background: var(--board);
+    border-radius: 2vmin;
+    padding: var(--gap);
+  }
+  .cell-bg{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    background: var(--cell);
+    border-radius: 1.4vmin;
+  }
+  .tile{
+    position:absolute;
+    width: var(--cellsize);
+    height: var(--cellsize);
+    border-radius: 1.4vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: calc(var(--cellsize) * 0.36);
+    transition: left 0.13s cubic-bezier(.4,0,.2,1), top 0.13s cubic-bezier(.4,0,.2,1);
+    will-change: left, top, transform;
+    z-index: 2;
+  }
+  .tile.pos{ background: var(--pos-bg); color: var(--pos-fg); box-shadow: 0 0 0 1px #2b2b2b inset; }
+  .tile.neg{ background: var(--neg-bg); color: var(--neg-fg); box-shadow: 0 0 0 1px #d6d6d6 inset; }
+  .tile.spawn{ animation: spawn 0.22s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes spawn{ 0%{ transform: scale(0); opacity:0; } 70%{ transform: scale(1.15); opacity:1; } 100%{ transform: scale(1); } }
+  .tile.vanish{ animation: vanish 0.22s ease both; z-index: 3; }
+  @keyframes vanish{ 0%{ transform: scale(1) rotate(0deg); opacity:1; } 100%{ transform: scale(0) rotate(25deg); opacity:0; } }
+  .tile.pulse{ animation: pulse 0.22s cubic-bezier(.4,0,.2,1); z-index: 3; }
+  @keyframes pulse{ 0%{ transform: scale(1); } 45%{ transform: scale(1.18); } 100%{ transform: scale(1); } }
+  .board.shake{ animation: shake 0.28s ease; }
+  @keyframes shake{ 0%,100%{ transform: translateX(0); } 25%{ transform: translateX(-1.2vmin); } 75%{ transform: translateX(1.2vmin); } }
+
+  .preview-panel{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-top: 0.2vmin;
+    flex-shrink: 0;
+  }
+  .preview-label{
+    font-size: 1.4vmin;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 1vmin;
+  }
+  .preview-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.3vmin;
+    width: calc(var(--cellsize) * 0.8);
+  }
+  .preview-list .preview-divider{ margin-top: -0.65vmin; margin-bottom: -0.65vmin; }
+  .preview-tile{
+    width: calc(var(--cellsize) * 0.6);
+    height: calc(var(--cellsize) * 0.6);
+    border-radius: 1.3vmin;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    font-size: calc(var(--cellsize) * 0.22);
+    flex-shrink: 0;
+  }
+  .preview-tile.pos{ background: var(--pos-bg); color: var(--pos-fg); box-shadow: 0 0 0 1px #2b2b2b inset; }
+  .preview-tile.neg{ background: var(--neg-bg); color: var(--neg-fg); box-shadow: 0 0 0 1px #d6d6d6 inset; }
+  .preview-divider{
+    width: calc(var(--cellsize) * 0.8);
+    height: 0.18vmin;
+    background: linear-gradient(to right, transparent 0%, white 20%, white 80%, transparent 100%);
+    margin: 0.3vmin 0;
+  }
+
+  .overlay{
+    position:absolute;
+    inset:0;
+    border-radius: 2vmin;
+    pointer-events:none;
+    background: rgba(220,40,40,0);
+    z-index: 10;
+  }
+  .overlay.flash{ animation: gameOverPulse 1s ease-out forwards; }
+  @keyframes gameOverPulse{ 0%{ background: rgba(220,40,40,0.6); } 100%{ background: rgba(220,40,40,0); } }
+
+  .btn-row{ display:flex; gap: 1.4vmin; flex-wrap: wrap; justify-content:center; }
+  .restart-btn{
+    display:flex; align-items:center; justify-content:center; gap: 1vmin;
+    background: var(--panel); color: #d8d8d8; border: none;
+    border-radius: 1.4vmin; padding: 1.4vmin 3vmin;
+    font-family: inherit; font-weight: 700; font-size: 1.8vmin; letter-spacing: 0.03em;
+    cursor:pointer; box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
+    transition: color 0.15s ease, transform 0.1s ease;
+  }
+  .restart-btn:hover{ color: var(--accent); }
+  .restart-btn:active{ transform: scale(0.96); }
+  .restart-btn.accent{ background: var(--accent); color: #1a1206; }
+  .restart-btn.accent:hover{ color: #000; }
+  .restart-btn .key-hint{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width: 2.6vmin; height: 2.6vmin; padding: 0 0.6vmin;
+    border-radius: 0.7vmin; background: var(--cell); color: var(--muted);
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 1.4vmin; font-weight: 800;
+  }
+  .restart-btn.toggled{ color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim), 0 0.3vmin 1vmin rgba(0,0,0,0.4); }
+
+  .footer-hint{
+    color: var(--muted);
+    font-size: 1.5vmin;
+    letter-spacing: 0.04em;
+    text-align:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+  }
+
+  /* ---------- Settings drawer ---------- */
+  .drawer-overlay{
+    position:fixed; inset:0; background: rgba(0,0,0,0.55);
+    z-index: 200; opacity:0; pointer-events:none; transition: opacity 0.2s ease;
+  }
+  .drawer-overlay.open{ opacity:1; pointer-events:auto; }
+  .drawer{
+    position:fixed; top:0; right:0; height:100%;
+    width: min(92vw, 420px);
+    background: var(--panel);
+    box-shadow: -0.5vmin 0 3vmin rgba(0,0,0,0.5);
+    transform: translateX(100%);
+    transition: transform 0.22s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column;
+    z-index: 201;
+  }
+  .drawer-overlay.open .drawer{ transform: translateX(0); }
+  .drawer-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 2.4vmin 2.6vmin; border-bottom: 1px solid var(--border);
+    flex-shrink:0;
+  }
+  .drawer-head h2{ margin:0; font-size: 2.4vmin; color:#f2f2f2; }
+  .drawer-body{
+    overflow-y:auto;
+    padding: 1vmin 2.6vmin 3vmin;
+    flex: 1;
+  }
+  .drawer-foot{
+    flex-shrink:0;
+    padding: 2vmin 2.6vmin;
+    border-top: 1px solid var(--border);
+    display:flex; gap: 1.2vmin;
+  }
+  fieldset{
+    border: 1px solid var(--border);
+    border-radius: 1.2vmin;
+    padding: 1.6vmin 1.8vmin 1.8vmin;
+    margin: 0 0 1.8vmin;
+  }
+  legend{
+    font-size: 1.5vmin;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    padding: 0 0.8vmin;
+  }
+  .field{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 1.2vmin; margin: 1.1vmin 0;
+  }
+  .field label{ font-size: 1.7vmin; color:#cfcfcf; flex:1; }
+  .field .hint{ display:block; font-size: 1.3vmin; color: var(--muted); margin-top:0.2vmin; }
+  .field input[type=number]{
+    width: 8vmin; background: var(--panel2); color:#f2f2f2; border:1px solid var(--border);
+    border-radius: 0.8vmin; padding: 0.8vmin; font-family: inherit; font-size: 1.6vmin; text-align:center;
+  }
+  .field input[type=range]{ width: 18vmin; accent-color: var(--accent); }
+  .field input[type=checkbox]{ width: 2.4vmin; height: 2.4vmin; accent-color: var(--accent); flex-shrink:0; }
+  .field select{
+    background: var(--panel2); color:#f2f2f2; border:1px solid var(--border);
+    border-radius: 0.8vmin; padding: 0.8vmin; font-family: inherit; font-size: 1.5vmin;
+  }
+  .field .range-val{
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    color: var(--accent); font-size: 1.5vmin; width: 5.5vmin; text-align:right; flex-shrink:0;
+  }
+  .sub-note{
+    font-size: 1.3vmin; color: var(--muted); line-height:1.5; margin: 0.4vmin 0 1.2vmin;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .tile, .overlay, .score-value{ transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
+      <div class="scores">
+        <div class="score-box">
+          <div class="score-label">Score</div>
+          <div class="score-value" id="score">0</div>
+        </div>
+        <div class="score-box">
+          <div class="score-label">Best</div>
+          <div class="score-value" id="best">0</div>
+        </div>
+      </div>
+      <button class="icon-btn" id="helpBtn" aria-label="How this works" title="Help">?</button>
+    </div>
+
+    <div class="board-col">
+      <div class="title" id="titleEl">
+        <span class="zero">Zero</span><span class="sum">Sum</span>
+        <div class="title-sub">Sandbox</div>
+      </div>
+
+      <div class="board-row">
+        <div class="board-wrap">
+          <div class="board" id="board"></div>
+          <div class="overlay" id="overlay"></div>
+        </div>
+        <div class="preview-panel">
+          <div class="preview-label">Next</div>
+          <div class="preview-list" id="previewPanel"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="restart-btn accent" id="restartBtn">New Game <span class="key-hint">R</span></button>
+      <button class="restart-btn" id="aiToggleBtn">AI: Off</button>
+      <button class="restart-btn" id="aiStepBtn">AI Step</button>
+    </div>
+
+    <div class="footer-hint" id="configSummary"></div>
+  </div>
+
+  <!-- ================= Settings Drawer ================= -->
+  <div class="drawer-overlay" id="drawerOverlay">
+    <div class="drawer">
+      <div class="drawer-head">
+        <h2>Sandbox Settings</h2>
+        <button class="icon-btn" id="closeDrawerBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="drawer-body">
+
+        <p class="sub-note">Changes to board size and initial deal apply on the next <b>New Game</b>. Everything else (merge rules, scaling, spawns, AI) applies live, even mid-game.</p>
+
+        <fieldset>
+          <legend>Board</legend>
+          <div class="field"><label for="cfg_rows">Rows</label><input type="number" id="cfg_rows" min="2" max="10" step="1"></div>
+          <div class="field"><label for="cfg_cols">Columns</label><input type="number" id="cfg_cols" min="2" max="10" step="1"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Tile Values &amp; Scaling</legend>
+          <div class="field"><label for="cfg_startMax">Starting max tile value<span class="hint">Deck range starts at ±this</span></label><input type="number" id="cfg_startMax" min="1" max="999" step="1"></div>
+          <div class="field"><label for="cfg_pointsPerStep">Points per scaling step</label><input type="number" id="cfg_pointsPerStep" min="1" max="1000000" step="100"></div>
+          <div class="field"><label for="cfg_stepIncrement">Max value increase per step</label><input type="number" id="cfg_stepIncrement" min="0" max="100" step="1"></div>
+          <div class="field"><label for="cfg_maxOverrideEnabled">Override current max tile</label><input type="checkbox" id="cfg_maxOverrideEnabled"></div>
+          <div class="field"><label for="cfg_maxOverrideValue">Override value<span class="hint">Freezes scaling at this value</span></label><input type="number" id="cfg_maxOverrideValue" min="1" max="9999" step="1"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Merging</legend>
+          <div class="field"><label for="cfg_cancelEnabled">Cancelling enabled (a + −a)</label><input type="checkbox" id="cfg_cancelEnabled"></div>
+          <div class="field"><label for="cfg_combineEnabled">Combining enabled (small + any)</label><input type="checkbox" id="cfg_combineEnabled"></div>
+          <div class="field"><label for="cfg_combineThreshold">Non-zeroing merge threshold<span class="hint">|tile| ≤ this can combine into any neighbor</span></label><input type="number" id="cfg_combineThreshold" min="0" max="999" step="1"></div>
+          <div class="field"><label for="cfg_cancelMultiplier">Cancel score multiplier</label><input type="number" id="cfg_cancelMultiplier" min="0" max="1000" step="1"></div>
+          <div class="field"><label for="cfg_combineMultiplier">Combine score multiplier</label><input type="number" id="cfg_combineMultiplier" min="0" max="1000" step="1"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Spawning</legend>
+          <div class="field"><label for="cfg_spawnCount">Tiles spawned per move</label><input type="number" id="cfg_spawnCount" min="1" max="20" step="1"></div>
+          <div class="field"><label for="cfg_multiSpawnChance">Extra-spawn chance<span class="hint">Rolled repeatedly after the base spawn(s)</span></label><input type="range" id="cfg_multiSpawnChance" min="0" max="100" step="1"><span class="range-val" id="val_multiSpawnChance">0%</span></div>
+          <div class="field"><label for="cfg_initialTiles">Initial tiles dealt</label><input type="number" id="cfg_initialTiles" min="1" max="100" step="1"></div>
+          <div class="field"><label for="cfg_deckMode">Deck mode</label>
+            <select id="cfg_deckMode">
+              <option value="bag">Shuffled bag (no repeats)</option>
+              <option value="random">Fully random</option>
+            </select>
+          </div>
+          <div class="field"><label for="cfg_positiveBias">Positive-tile bias<span class="hint">Used for initial deal balance</span></label><input type="range" id="cfg_positiveBias" min="0" max="100" step="1"><span class="range-val" id="val_positiveBias">50%</span></div>
+          <div class="field"><label for="cfg_valueMinOverrideEnabled">Override min spawn value</label><input type="checkbox" id="cfg_valueMinOverrideEnabled"></div>
+          <div class="field"><label for="cfg_valueMin">Min value</label><input type="number" id="cfg_valueMin" min="-9999" max="9999" step="1"></div>
+          <div class="field"><label for="cfg_valueMaxOverrideEnabled">Override max spawn value</label><input type="checkbox" id="cfg_valueMaxOverrideEnabled"></div>
+          <div class="field"><label for="cfg_valueMax">Max value</label><input type="number" id="cfg_valueMax" min="-9999" max="9999" step="1"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Opening Deal</legend>
+          <div class="field"><label for="cfg_rerollDepth">Reroll-avoidance depth<span class="hint">0 disables — rerolls openings with an immediate merge within N moves</span></label><input type="number" id="cfg_rerollDepth" min="0" max="10" step="1"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Expectimax AI</legend>
+          <div class="field"><label for="cfg_aiEnabled">Auto-play (AI plays continuously)</label><input type="checkbox" id="cfg_aiEnabled"></div>
+          <div class="field"><label for="cfg_aiDepth">Search depth</label><input type="number" id="cfg_aiDepth" min="1" max="3" step="1"></div>
+          <div class="field"><label for="cfg_aiSpeed">Move delay (ms)</label><input type="number" id="cfg_aiSpeed" min="50" max="3000" step="50"></div>
+          <p class="sub-note">The AI runs a depth-limited expectimax search: it maximizes its own move, averages over sampled random spawns (weighted toward small combinable values and a representative large value), and scores boards by empty space, total merge potential, and total remaining magnitude. Use <b>AI Step</b> to make one AI move at a time without auto-play.</p>
+        </fieldset>
+
+      </div>
+      <div class="drawer-foot">
+        <button class="restart-btn" id="resetDefaultsBtn">Reset Defaults</button>
+        <button class="restart-btn accent" id="newGameFromDrawerBtn">New Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Help Modal ================= -->
+  <div class="drawer-overlay" id="helpOverlay">
+    <div class="drawer" style="right:auto; left:0; transform:translateX(-100%);" id="helpPanel">
+      <div class="drawer-head">
+        <h2>How This Works</h2>
+        <button class="icon-btn" id="closeHelpBtn">✕</button>
+      </div>
+      <div class="drawer-body">
+        <p class="sub-note" style="font-size:1.6vmin; color:#cfcfcf;">Swipe or use arrow keys / WASD to slide every tile in one direction. Tiles glide until they hit the edge of the board or another tile.</p>
+        <p class="sub-note" style="font-size:1.6vmin; color:#cfcfcf;"><b>Cancel:</b> two tiles that are exact opposites (equal magnitude, opposite sign) vanish when pushed together.</p>
+        <p class="sub-note" style="font-size:1.6vmin; color:#cfcfcf;"><b>Combine:</b> a tile at or under the combine threshold can fuse into any neighbor it's pushed into (as long as the resulting sum doesn't exceed the current max tile value), becoming one tile holding their sum.</p>
+        <p class="sub-note" style="font-size:1.6vmin; color:#cfcfcf;">Everything here — board size, tile ranges, scaling, merge rules, spawn behavior, and the AI — is adjustable from the gear (⚙) menu. Nothing is fixed.</p>
+      </div>
+      <div class="drawer-foot">
+        <button class="restart-btn accent" id="closeHelpBtn2" style="width:100%;">Got it</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ================= CONFIG =================
+  const CONFIG_DEFAULTS = {
+    rows: 4,
+    cols: 4,
+    startMax: 10,
+    pointsPerStep: 10000,
+    stepIncrement: 1,
+    maxOverrideEnabled: false,
+    maxOverrideValue: 10,
+    cancelEnabled: true,
+    combineEnabled: true,
+    combineThreshold: 3,
+    cancelMultiplier: 10,
+    combineMultiplier: 1,
+    spawnCount: 1,
+    multiSpawnChance: 0,
+    initialTiles: 8,
+    deckMode: 'bag',
+    positiveBias: 0.5,
+    valueMinOverrideEnabled: false,
+    valueMin: -10,
+    valueMaxOverrideEnabled: false,
+    valueMax: 10,
+    rerollDepth: 5,
+    aiEnabled: false,
+    aiDepth: 2,
+    aiSpeed: 400
+  };
+
+  const CFG_KEY = 'zerosum_sandbox_cfg_v1';
+  let CONFIG = Object.assign({}, CONFIG_DEFAULTS);
+  try{
+    const raw = localStorage.getItem(CFG_KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      CONFIG = Object.assign({}, CONFIG_DEFAULTS, saved);
+    }
+  }catch(e){ /* ignore */ }
+
+  function persistConfig(){
+    try{ localStorage.setItem(CFG_KEY, JSON.stringify(CONFIG)); }catch(e){}
+  }
+
+  // board dimensions actually in play (only change on New Game)
+  let ROWS = CONFIG.rows;
+  let COLS = CONFIG.cols;
+
+  let tileIdCounter = 1;
+
+  // ---------------- Deck system ----------------
+  let deck = [];
+  let anyBlockGenerated = false;
+
+  function currentMaxValue(){
+    if(CONFIG.maxOverrideEnabled) return Math.max(1, CONFIG.maxOverrideValue);
+    return Math.max(1, CONFIG.startMax + Math.floor(score / Math.max(1,CONFIG.pointsPerStep)) * CONFIG.stepIncrement);
+  }
+
+  function spawnRange(){
+    const cur = currentMaxValue();
+    const min = CONFIG.valueMinOverrideEnabled ? CONFIG.valueMin : -cur;
+    const max = CONFIG.valueMaxOverrideEnabled ? CONFIG.valueMax : cur;
+    return min <= max ? [min, max] : [max, min];
+  }
+
+  function newShuffledBlock(){
+    const [lo, hi] = spawnRange();
+    const iLo = Math.round(lo), iHi = Math.round(hi);
+    const block = [];
+    for(let v=iLo; v<=iHi; v++){ if(v!==0) block.push(v); }
+    if(block.length === 0) block.push(1);
+    for(let i=block.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [block[i],block[j]] = [block[j],block[i]];
+    }
+    return block.map((v, idx) => ({ value: v, boundary: idx===0 && anyBlockGenerated }));
+  }
+
+  function randomSingleEntry(){
+    const [lo, hi] = spawnRange();
+    const iLo = Math.round(lo), iHi = Math.round(hi);
+    let v, tries=0;
+    do{
+      v = Math.floor(Math.random()*(iHi-iLo+1)) + iLo;
+      tries++;
+    } while(v===0 && tries<50);
+    if(v===0) v = 1;
+    return { value: v, boundary: false };
+  }
+
+  function ensureDeck(minLen){
+    while(deck.length < minLen){
+      if(CONFIG.deckMode === 'random'){
+        deck.push(randomSingleEntry());
+      } else {
+        deck.push(...newShuffledBlock());
+        anyBlockGenerated = true;
+      }
+    }
+  }
+
+  function removeAt(index){
+    const removed = deck.splice(index,1)[0];
+    if(removed && removed.boundary && index > 0 && deck[index] && !deck[index].boundary){
+      deck[index].boundary = true;
+    }
+    ensureDeck(5);
+    renderPreview();
+    return removed;
+  }
+
+  function drawValue(){
+    ensureDeck(5);
+    return removeAt(0).value;
+  }
+
+  function drawValueWithSign(wantPositive){
+    ensureDeck(5);
+    let i = 0, tries = 0;
+    while(tries < 200){
+      if(i >= deck.length) ensureDeck(deck.length + 1);
+      if((deck[i].value > 0) === wantPositive){
+        return removeAt(i).value;
+      }
+      i++; tries++;
+    }
+    const [lo, hi] = spawnRange();
+    const mag = Math.max(1, Math.min(Math.abs(lo), Math.abs(hi)) || 1);
+    return wantPositive ? mag : -mag;
+  }
+
+  // ---------------- state ----------------
+  let tiles = [];
+  let score = 0;
+  let best = 0;
+  let busy = false;
+  let gameOver = false;
+
+  const boardEl = document.getElementById('board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlayEl = document.getElementById('overlay');
+  const previewPanelEl = document.getElementById('previewPanel');
+  const configSummaryEl = document.getElementById('configSummary');
+
+  function occupied(r,c){ return tiles.find(t => t.r===r && t.c===c); }
+
+  function emptyCells(){
+    const list = [];
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      if(!occupied(r,c)) list.push({r,c});
+    }
+    return list;
+  }
+
+  function evaluateMerge(a, b){
+    if(CONFIG.cancelEnabled && a + b === 0){
+      return { type:'cancel', scoreGain: Math.abs(a) * CONFIG.cancelMultiplier };
+    }
+    if(!CONFIG.combineEnabled) return null;
+    if(Math.abs(a) <= CONFIG.combineThreshold || Math.abs(b) <= CONFIG.combineThreshold){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= currentMaxValue()){
+        return { type:'combine', value: sum, scoreGain: Math.min(Math.abs(a), Math.abs(b)) * CONFIG.combineMultiplier };
+      }
+    }
+    return null;
+  }
+
+  // ---------------- board rendering ----------------
+  function cellPixel(){
+    const rootStyles = getComputedStyle(document.documentElement);
+    const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+    const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
+    const gap = parseFloat(rootStyles.getPropertyValue('--gap')) * vmin;
+    return {cell, gap};
+  }
+
+  function positionEl(el, r, c){
+    const {cell, gap} = cellPixel();
+    el.style.left = (gap + c * (cell + gap)) + 'px';
+    el.style.top = (gap + r * (cell + gap)) + 'px';
+  }
+
+  function applyBoardSizing(){
+    const maxDim = Math.max(ROWS, COLS);
+    let cellVmin = 76 / (maxDim * 1.15 + 0.15);
+    cellVmin = Math.max(3.2, Math.min(21, cellVmin));
+    const gapVmin = cellVmin * 0.14;
+    document.documentElement.style.setProperty('--cellsize', cellVmin + 'vmin');
+    document.documentElement.style.setProperty('--gap', gapVmin + 'vmin');
+    boardEl.style.width = `calc(${COLS} * var(--cellsize) + ${COLS+1} * var(--gap))`;
+    boardEl.style.height = `calc(${ROWS} * var(--cellsize) + ${ROWS+1} * var(--gap))`;
+  }
+
+  function buildCellBackgrounds(){
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const bg = document.createElement('div');
+      bg.className = 'cell-bg';
+      positionEl(bg, r, c);
+      boardEl.appendChild(bg);
+    }
+  }
+
+  function createTileEl(tile, skipAnim){
+    const el = document.createElement('div');
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + (skipAnim ? '' : ' spawn');
+    el.textContent = Math.abs(tile.value);
+    positionEl(el, tile.r, tile.c);
+    boardEl.appendChild(el);
+    tile.el = el;
+    if(!skipAnim){
+      el.addEventListener('animationend', () => el.classList.remove('spawn'), {once:true});
+    }
+    return el;
+  }
+
+  function updateTileEl(tile){
+    const el = tile.el;
+    el.textContent = Math.abs(tile.value);
+    el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg');
+    positionEl(el, tile.r, tile.c);
+  }
+
+  function pulseTile(tile){
+    const el = tile.el;
+    if(!el) return;
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+    el.addEventListener('animationend', () => el.classList.remove('pulse'), {once:true});
+  }
+
+  function removeTileEl(tile, animate){
+    const el = tile.el;
+    if(!el) return;
+    if(animate){
+      el.classList.add('vanish');
+      el.addEventListener('animationend', () => el.remove(), {once:true});
+    } else {
+      el.remove();
+    }
+  }
+
+  function renderScores(){
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+  }
+
+  function bumpScore(){
+    scoreEl.classList.remove('bump');
+    void scoreEl.offsetWidth;
+    scoreEl.classList.add('bump');
+  }
+
+  function renderPreview(){
+    const queuePreviews = 5;
+    if(!previewPanelEl) return;
+    ensureDeck(queuePreviews);
+    previewPanelEl.innerHTML = '';
+    for(let i=0;i<queuePreviews;i++){
+      const entry = deck[i];
+      if(!entry) continue;
+      if(entry.boundary){
+        const div = document.createElement('div');
+        div.className = 'preview-divider';
+        previewPanelEl.appendChild(div);
+      }
+      const el = document.createElement('div');
+      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg');
+      el.textContent = Math.abs(entry.value);
+      previewPanelEl.appendChild(el);
+    }
+  }
+
+  function renderConfigSummary(){
+    const [lo,hi] = spawnRange();
+    configSummaryEl.textContent =
+      `${ROWS}×${COLS} · max ±${currentMaxValue()} · range [${Math.round(lo)},${Math.round(hi)}] · ` +
+      `${CONFIG.cancelEnabled ? 'cancel' : ''}${CONFIG.cancelEnabled && CONFIG.combineEnabled ? '+' : ''}${CONFIG.combineEnabled ? 'combine≤'+CONFIG.combineThreshold : ''} · ` +
+      `spawn×${CONFIG.spawnCount}${CONFIG.multiSpawnChance>0 ? '+' : ''}`;
+  }
+
+  // ---------------- line helpers ----------------
+  function getLineCoords(dir){
+    const lines = [];
+    if(dir==='left'){
+      for(let r=0;r<ROWS;r++){ const line=[]; for(let c=0;c<COLS;c++) line.push({r,c}); lines.push(line); }
+    } else if(dir==='right'){
+      for(let r=0;r<ROWS;r++){ const line=[]; for(let c=COLS-1;c>=0;c--) line.push({r,c}); lines.push(line); }
+    } else if(dir==='up'){
+      for(let c=0;c<COLS;c++){ const line=[]; for(let r=0;r<ROWS;r++) line.push({r,c}); lines.push(line); }
+    } else if(dir==='down'){
+      for(let c=0;c<COLS;c++){ const line=[]; for(let r=ROWS-1;r>=0;r--) line.push({r,c}); lines.push(line); }
+    }
+    return lines;
+  }
+
+  function boardValues(){
+    const values = new Array(ROWS*COLS).fill(null);
+    tiles.forEach(t => { values[t.r*COLS + t.c] = t.value; });
+    return values;
+  }
+
+  function simulateMoved(values, dir){
+    const lines = getLineCoords(dir);
+    let moved = false;
+    for(const line of lines){
+      const arr = line.map(p => values[p.r*COLS + p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]===null || arr[i+1]===undefined) continue;
+        if(arr[i]===null || arr[i]===undefined){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i]){
+          const result = evaluateMerge(arr[i], arr[i+1]);
+          if(result){
+            arr[i] = result.type === 'combine' ? result.value : null;
+            arr[i+1] = null;
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+    }
+    return moved;
+  }
+
+  function hasAnyValidMove(){
+    const values = boardValues();
+    return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
+  }
+
+  // ---------------- real move ----------------
+  function spawnAfterMove(){
+    let count = Math.max(1, Math.round(CONFIG.spawnCount));
+    let guard = 0;
+    while(Math.random() < CONFIG.multiSpawnChance && count < ROWS*COLS && guard < 200){
+      count++; guard++;
+    }
+    const spawned = [];
+    for(let i=0;i<count;i++){
+      if(emptyCells().length === 0) break;
+      spawned.push(spawnRandomTile());
+    }
+    return spawned;
+  }
+
+  function doMove(dir){
+    if(busy || gameOver) return false;
+    const lines = getLineCoords(dir);
+    let moved = false;
+    let scoreGain = 0;
+    const removedIds = new Set();
+    const combinedIds = new Set();
+
+    for(const line of lines){
+      const lineTiles = line.map(p => occupied(p.r, p.c) || null);
+      const mergedInto = new Array(lineTiles.length).fill(false);
+
+      for(let i=0;i<lineTiles.length-1;i++){
+        if(!lineTiles[i+1]) continue;
+        if(!lineTiles[i]){
+          lineTiles[i] = lineTiles[i+1];
+          lineTiles[i+1] = null;
+          moved = true;
+        } else if(!mergedInto[i]){
+          const a = lineTiles[i], b = lineTiles[i+1];
+          const result = evaluateMerge(a.value, b.value);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              removedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i] = null;
+              lineTiles[i+1] = null;
+            } else {
+              a.value = result.value;
+              combinedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i+1] = null;
+            }
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+
+      for(let idx=0; idx<line.length; idx++){
+        const pos = line[idx];
+        const t = lineTiles[idx];
+        if(t){ t.r = pos.r; t.c = pos.c; }
+      }
+    }
+
+    if(!moved) return false;
+
+    tiles.forEach(t => {
+      if(removedIds.has(t.id)) return;
+      updateTileEl(t);
+      if(combinedIds.has(t.id)) pulseTile(t);
+    });
+    tiles.forEach(t => { if(removedIds.has(t.id)) removeTileEl(t, true); });
+    tiles = tiles.filter(t => !removedIds.has(t.id));
+
+    score += scoreGain;
+    if(score > best) best = score;
+    renderScores();
+    if(scoreGain > 0) bumpScore();
+
+    spawnAfterMove();
+
+    if(!hasAnyValidMove()) showGameOver();
+    renderConfigSummary();
+
+    return true;
+  }
+
+  function showGameOver(){
+    gameOver = true;
+    stopAI();
+    overlayEl.classList.remove('flash');
+    void overlayEl.offsetWidth;
+    overlayEl.classList.add('flash');
+  }
+
+  function shakeBoard(){
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth;
+    boardEl.classList.add('shake');
+  }
+
+  // ---------------- opening reroll-avoidance ----------------
+  function boardToKey(values){ return values.map(v => v===null ? '.' : v).join(','); }
+
+  function simulateBoardSimple(values, dir){
+    const board = values.slice();
+    const lines = getLineCoords(dir);
+    let moved=false, merged=false;
+    for(const line of lines){
+      const arr = line.map(p => board[p.r*COLS+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]==null) continue;
+        if(arr[i]==null){ arr[i]=arr[i+1]; arr[i+1]=null; moved=true; i=Math.max(-1,i-2); }
+        else if(!mergedInto[i] && CONFIG.cancelEnabled && arr[i]+arr[i+1]===0){
+          arr[i]=null; arr[i+1]=null; mergedInto[i]=true; merged=true; moved=true;
+        }
+      }
+      for(let i=0;i<line.length;i++){ const p=line[i]; board[p.r*COLS+p.c]=arr[i]; }
+    }
+    return {board, moved, merged};
+  }
+
+  function mergeWithinDepth(startValues, depth){
+    if(depth <= 0) return false;
+    const queue = [{board:startValues, depth:0}];
+    const visited = new Set();
+    while(queue.length){
+      const cur = queue.shift();
+      const key = boardToKey(cur.board);
+      if(visited.has(key)) continue;
+      visited.add(key);
+      if(cur.depth >= depth) continue;
+      for(const dir of ['left','right','up','down']){
+        const result = simulateBoardSimple(cur.board, dir);
+        if(result.merged) return true;
+        if(result.moved) queue.push({board: result.board, depth: cur.depth+1});
+      }
+    }
+    return false;
+  }
+
+  // ---------------- init ----------------
+  function buildInitialSigns(n){
+    const posCount = Math.max(0, Math.min(n, Math.round(n * CONFIG.positiveBias)));
+    const negCount = n - posCount;
+    const arr = [];
+    for(let i=0;i<posCount;i++) arr.push(true);
+    for(let i=0;i<negCount;i++) arr.push(false);
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function newGame(){
+    stopAI();
+    ROWS = Math.max(2, Math.min(10, Math.round(CONFIG.rows)));
+    COLS = Math.max(2, Math.min(10, Math.round(CONFIG.cols)));
+    CONFIG.rows = ROWS; CONFIG.cols = COLS;
+
+    applyBoardSizing();
+    boardEl.innerHTML = '';
+    tiles = [];
+    score = 0;
+    busy = false;
+    gameOver = false;
+    overlayEl.classList.remove('flash');
+    deck = [];
+    anyBlockGenerated = false;
+    buildCellBackgrounds();
+
+    const totalCells = ROWS * COLS;
+    const initialCount = Math.max(1, Math.min(Math.round(CONFIG.initialTiles), Math.max(1, totalCells - 1)));
+
+    let attempts = 0;
+    while(true){
+      attempts++;
+      tiles = [];
+      const empties = [];
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) empties.push({r,c});
+
+      const [lo, hi] = spawnRange();
+      const canBalance = lo < 0 && hi > 0;
+      const signs = canBalance ? buildInitialSigns(initialCount) : null;
+
+      for(let i=0;i<initialCount;i++){
+        const idx = Math.floor(Math.random()*empties.length);
+        const spot = empties.splice(idx,1)[0];
+        const value = canBalance ? drawValueWithSign(signs[i]) : drawValue();
+        tiles.push({ id: tileIdCounter++, value, r: spot.r, c: spot.c, el: null });
+      }
+
+      const values = new Array(totalCells).fill(null);
+      for(const t of tiles) values[t.r*COLS + t.c] = t.value;
+
+      if(CONFIG.rerollDepth <= 0 || !mergeWithinDepth(values, CONFIG.rerollDepth)) break;
+      if(attempts > 40) break; // safety valve for extreme configs
+
+      deck = [];
+      anyBlockGenerated = false;
+    }
+
+    tiles.forEach(t => createTileEl(t));
+    renderScores();
+    renderPreview();
+    renderConfigSummary();
+    persistConfig();
+
+    if(CONFIG.aiEnabled) startAI();
+  }
+
+  function spawnRandomTile(){
+    const empties = emptyCells();
+    if(empties.length === 0) return null;
+    const spot = empties[Math.floor(Math.random()*empties.length)];
+    const tile = { id: tileIdCounter++, value: drawValue(), r: spot.r, c: spot.c, el:null };
+    tiles.push(tile);
+    createTileEl(tile);
+    return tile;
+  }
+
+  // ================= EXPECTIMAX AI =================
+  function simulateMoveValues(values, dir){
+    const lines = getLineCoords(dir);
+    const board = values.slice();
+    let moved = false;
+    for(const line of lines){
+      const arr = line.map(p => board[p.r*COLS+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]==null) continue;
+        if(arr[i]==null){ arr[i]=arr[i+1]; arr[i+1]=null; moved=true; }
+        else if(!mergedInto[i]){
+          const result = evaluateMerge(arr[i], arr[i+1]);
+          if(result){
+            arr[i] = result.type === 'combine' ? result.value : null;
+            arr[i+1] = null;
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+      for(let i=0;i<line.length;i++){ const p=line[i]; board[p.r*COLS+p.c]=arr[i]; }
+    }
+    return {board, moved};
+  }
+
+  function evaluateHeuristic(values){
+    let empty = 0, totalAbs = 0, mergePotential = 0;
+    for(let i=0;i<values.length;i++){
+      const v = values[i];
+      if(v == null){ empty++; continue; }
+      totalAbs += Math.abs(v);
+    }
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const v = values[r*COLS+c];
+        if(v == null) continue;
+        const neighbors = [[0,1],[1,0]];
+        for(const [dr,dc] of neighbors){
+          const nr=r+dr, nc=c+dc;
+          if(nr>=ROWS || nc>=COLS) continue;
+          const w = values[nr*COLS+nc];
+          if(w == null) continue;
+          if(CONFIG.cancelEnabled && v+w===0){
+            mergePotential += Math.abs(v) * 2;
+          } else if(CONFIG.combineEnabled && (Math.abs(v)<=CONFIG.combineThreshold || Math.abs(w)<=CONFIG.combineThreshold) && Math.abs(v+w) <= currentMaxValue()){
+            mergePotential += Math.min(Math.abs(v), Math.abs(w));
+          }
+        }
+      }
+    }
+    return empty*8 - totalAbs*0.6 + mergePotential*3;
+  }
+
+  function chanceCandidates(){
+    const [lo, hi] = spawnRange();
+    const th = Math.max(1, Math.min(CONFIG.combineThreshold || 1, Math.max(Math.abs(lo), hi) || 1));
+    const bigMag = Math.max(th+1, Math.round(hi*0.6)) || 1;
+    return [
+      {v: th, p:0.3}, {v:-th, p:0.3},
+      {v: bigMag, p:0.2}, {v:-bigMag, p:0.2}
+    ];
+  }
+
+  function expectiMove(values, depth){
+    let best = -Infinity, any = false;
+    for(const dir of ['left','right','up','down']){
+      const {board, moved} = simulateMoveValues(values, dir);
+      if(!moved) continue;
+      any = true;
+      const val = depth <= 0 ? evaluateHeuristic(board) : expectiChance(board, depth-1);
+      if(val > best) best = val;
+    }
+    if(!any) return evaluateHeuristic(values) - 1000; // dead end penalty
+    return best;
+  }
+
+  function expectiChance(values, depth){
+    const empties = [];
+    for(let i=0;i<values.length;i++) if(values[i]==null) empties.push(i);
+    if(empties.length === 0) return evaluateHeuristic(values);
+
+    const maxSamples = 3;
+    let sampled = empties;
+    if(empties.length > maxSamples){
+      sampled = [];
+      const copy = empties.slice();
+      for(let i=0;i<maxSamples;i++){
+        const idx = Math.floor(Math.random()*copy.length);
+        sampled.push(copy.splice(idx,1)[0]);
+      }
+    }
+
+    const candidates = chanceCandidates();
+    let total = 0;
+    for(const cellIdx of sampled){
+      let cellVal = 0;
+      for(const cand of candidates){
+        const nv = values.slice();
+        nv[cellIdx] = cand.v;
+        cellVal += cand.p * expectiMove(nv, depth);
+      }
+      total += cellVal;
+    }
+    return total / sampled.length;
+  }
+
+  function chooseAIMove(){
+    const values = boardValues();
+    let bestDir = null, bestVal = -Infinity;
+    for(const dir of ['left','right','up','down']){
+      const {board, moved} = simulateMoveValues(values, dir);
+      if(!moved) continue;
+      const depth = Math.max(1, Math.min(3, Math.round(CONFIG.aiDepth))) - 1;
+      const val = expectiChance(board, depth);
+      if(val > bestVal){ bestVal = val; bestDir = dir; }
+    }
+    return bestDir;
+  }
+
+  let aiTimer = null;
+  const aiToggleBtn = document.getElementById('aiToggleBtn');
+  function startAI(){
+    if(aiTimer || gameOver) return;
+    CONFIG.aiEnabled = true;
+    aiToggleBtn.textContent = 'AI: On';
+    aiToggleBtn.classList.add('toggled');
+    aiTimer = setInterval(() => {
+      if(gameOver || busy){ return; }
+      const dir = chooseAIMove();
+      if(!dir){ stopAI(); return; }
+      doMove(dir);
+    }, Math.max(50, CONFIG.aiSpeed));
+  }
+  function stopAI(){
+    if(aiTimer){ clearInterval(aiTimer); aiTimer = null; }
+    CONFIG.aiEnabled = false;
+    aiToggleBtn.textContent = 'AI: Off';
+    aiToggleBtn.classList.remove('toggled');
+  }
+  function toggleAI(){ if(aiTimer) stopAI(); else startAI(); persistConfig(); }
+  aiToggleBtn.addEventListener('click', toggleAI);
+
+  document.getElementById('aiStepBtn').addEventListener('click', () => {
+    if(gameOver || busy) return;
+    const dir = chooseAIMove();
+    if(dir) doMove(dir); else shakeBoard();
+  });
+
+  // ---------------- input ----------------
+  const KEY_DIR = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down', a:'left', d:'right', w:'up', s:'down' };
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'r' || e.key === 'R'){ e.preventDefault(); newGame(); return; }
+    const dir = KEY_DIR[e.key];
+    if(!dir) return;
+    e.preventDefault();
+    if(gameOver) return;
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:false});
+
+  let touchStart = null;
+  boardEl.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    touchStart = {x:t.clientX, y:t.clientY};
+  }, {passive:true});
+  boardEl.addEventListener('touchend', (e) => {
+    if(!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    touchStart = null;
+    if(Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+    if(gameOver) return;
+    let dir;
+    if(Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 'right' : 'left';
+    else dir = dy > 0 ? 'down' : 'up';
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+  }, {passive:true});
+
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.cell-bg').forEach((el, idx) => {
+      positionEl(el, Math.floor(idx/COLS), idx%COLS);
+    });
+    tiles.forEach(t => positionEl(t.el, t.r, t.c));
+  });
+
+  document.getElementById('restartBtn').addEventListener('click', () => newGame());
+
+  // ---------------- Settings drawer wiring ----------------
+  const drawerOverlay = document.getElementById('drawerOverlay');
+  document.getElementById('settingsBtn').addEventListener('click', () => drawerOverlay.classList.add('open'));
+  document.getElementById('closeDrawerBtn').addEventListener('click', () => drawerOverlay.classList.remove('open'));
+  drawerOverlay.addEventListener('click', (e) => { if(e.target === drawerOverlay) drawerOverlay.classList.remove('open'); });
+  document.getElementById('newGameFromDrawerBtn').addEventListener('click', () => { newGame(); });
+
+  const helpOverlay = document.getElementById('helpOverlay');
+  document.getElementById('helpBtn').addEventListener('click', () => helpOverlay.classList.add('open'));
+  document.getElementById('closeHelpBtn').addEventListener('click', () => helpOverlay.classList.remove('open'));
+  document.getElementById('closeHelpBtn2').addEventListener('click', () => helpOverlay.classList.remove('open'));
+  helpOverlay.addEventListener('click', (e) => { if(e.target === helpOverlay) helpOverlay.classList.remove('open'); });
+
+  const BOOL_KEYS = ['maxOverrideEnabled','cancelEnabled','combineEnabled','valueMinOverrideEnabled','valueMaxOverrideEnabled','aiEnabled'];
+  const PERCENT_KEYS = ['multiSpawnChance','positiveBias'];
+  const SELECT_KEYS = ['deckMode'];
+  const ALL_KEYS = Object.keys(CONFIG_DEFAULTS);
+
+  function refreshInputsFromConfig(){
+    ALL_KEYS.forEach(key => {
+      const el = document.getElementById('cfg_' + key);
+      if(!el) return;
+      if(BOOL_KEYS.includes(key)){
+        el.checked = !!CONFIG[key];
+      } else if(PERCENT_KEYS.includes(key)){
+        el.value = Math.round(CONFIG[key]*100);
+        const disp = document.getElementById('val_' + key);
+        if(disp) disp.textContent = Math.round(CONFIG[key]*100) + '%';
+      } else if(SELECT_KEYS.includes(key)){
+        el.value = CONFIG[key];
+      } else {
+        el.value = CONFIG[key];
+      }
+    });
+  }
+
+  function bindInputs(){
+    ALL_KEYS.forEach(key => {
+      const el = document.getElementById('cfg_' + key);
+      if(!el) return;
+      el.addEventListener('input', () => {
+        if(BOOL_KEYS.includes(key)){
+          CONFIG[key] = el.checked;
+          if(key === 'aiEnabled'){
+            if(el.checked) startAI(); else stopAI();
+          }
+        } else if(PERCENT_KEYS.includes(key)){
+          const pct = parseFloat(el.value) || 0;
+          CONFIG[key] = pct/100;
+          const disp = document.getElementById('val_' + key);
+          if(disp) disp.textContent = Math.round(pct) + '%';
+        } else if(SELECT_KEYS.includes(key)){
+          CONFIG[key] = el.value;
+        } else {
+          const num = parseFloat(el.value);
+          if(!isNaN(num)) CONFIG[key] = num;
+        }
+        renderConfigSummary();
+        persistConfig();
+      });
+    });
+  }
+
+  document.getElementById('resetDefaultsBtn').addEventListener('click', () => {
+    CONFIG = Object.assign({}, CONFIG_DEFAULTS);
+    refreshInputsFromConfig();
+    persistConfig();
+    renderConfigSummary();
+  });
+
+  refreshInputsFromConfig();
+  bindInputs();
+
+  window.addEventListener('beforeunload', persistConfig);
+
+  // ---------------- debug hook ----------------
+  window.debug = {
+    getConfig(){ return CONFIG; },
+    setScore(v){ score = v; if(score>best) best=score; renderScores(); renderPreview(); renderConfigSummary(); },
+    getMaxValue(){ return currentMaxValue(); },
+    getDeck(){ return deck; },
+    chooseAIMove
+  };
+
+  newGame();
+  if(CONFIG.aiEnabled) aiToggleBtn.classList.add('toggled'), aiToggleBtn.textContent = 'AI: On';
+})();
+</script>
+</body>
+</html>
