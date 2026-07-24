@@ -588,14 +588,6 @@
           <span class="ai-field-label">Depth</span>
           <input type="number" id="aiDepthInput" class="ai-field-input" min="1" max="20" step="1" value="3">
         </label>
-        <label class="ai-field">
-          <span class="ai-field-label">Min ms</span>
-          <input type="number" id="aiMinInput" class="ai-field-input" min="0" max="5000" step="50" value="150">
-        </label>
-        <label class="ai-field">
-          <span class="ai-field-label">Max ms</span>
-          <input type="number" id="aiMaxInput" class="ai-field-input" min="10" max="5000" step="50" value="400">
-        </label>
       </div>
     </div>
 
@@ -630,7 +622,7 @@
       <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
 
       <h3>AI Auto-Play</h3>
-      <p>The <b>AI</b> button hands control to an expectimax search that looks ahead over its own possible moves and the tile that lands next. <b>Depth</b> sets how many moves it plans ahead; deeper is smarter but slower. <b>Min ms</b> paces it so it never plays faster than that per move; <b>Max ms</b> caps how long it's allowed to think, cutting the search short if needed.</p>
+      <p>The <b>AI</b> button hands control to an expectimax search that looks ahead over its own possible moves and the tile that lands next. It searches iteratively -- depth 1, then 2, then 3, and so on, up to the chosen <b>Depth</b>, keeping the best move found so far and going one level deeper each time -- then plays the resulting move immediately.</p>
 
       <button class="modal-close" id="closeHelp">Got it</button>
     </div>
@@ -1358,7 +1350,7 @@
 
   // Player ("max") node: try every direction, take the best.
   function expectimaxMax(values, depth, ctx){
-    if(depth <= 0 || performance.now() > ctx.deadline){
+    if(depth <= 0){
       return boardHeuristic(values, ctx.combineOn);
     }
     let best = -Infinity;
@@ -1378,7 +1370,6 @@
   // deck); only its landing cell is random. Sample a bounded subset of
   // empty cells when there are many, to keep branching factor in check.
   function expectimaxChance(values, depth, ctx){
-    if(performance.now() > ctx.deadline) return boardHeuristic(values, ctx.combineOn);
     const empties = [];
     for(let i=0;i<values.length;i++) if(values[i] == null) empties.push(i);
     if(empties.length === 0) return expectimaxMax(values, depth-1, ctx);
@@ -1401,25 +1392,32 @@
   }
 
   // Returns the best direction to play, or null if no move is legal.
-  // `maxThinkMs` bounds wall-clock time: every recursive call checks the
-  // deadline and falls back to a plain heuristic once it's passed, so a
-  // deep/slow search degrades gracefully instead of overshooting badly.
-  function pickBestMove(depth, maxThinkMs){
+  // Iterative deepening: search depth 1 first and remember its answer, then
+  // try depth 2, 3, ... up to `maxDepth`, replacing the answer each time a
+  // deeper search finishes.
+  function pickBestMove(maxDepth){
     ensureDeck(1);
     const values = boardValues();
     const ctx = {
       maxVal: currentMaxValue(),
       combineOn: combineEnabled(),
-      nextValue: deck[0].value,
-      deadline: performance.now() + Math.max(10, maxThinkMs)
+      nextValue: deck[0].value
     };
-    let bestDir = null, bestScore = -Infinity;
-    for(const dir of DIRS){
-      const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
-      if(!moved) continue;
-      const val = scoreGain + expectimaxChance(board, depth-1, ctx);
-      if(val > bestScore){ bestScore = val; bestDir = dir; }
+
+    let bestDir = null;
+
+    for(let depth = 1; depth <= maxDepth; depth++){
+      let depthBestDir = null, depthBestScore = -Infinity;
+      for(const dir of DIRS){
+        const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
+        if(!moved) continue;
+        const val = scoreGain + expectimaxChance(board, depth-1, ctx);
+        if(val > depthBestScore){ depthBestScore = val; depthBestDir = dir; }
+      }
+
+      if(depthBestDir !== null) bestDir = depthBestDir;
     }
+
     return bestDir;
   }
 
@@ -1427,8 +1425,6 @@
   const aiToggleBtn = document.getElementById('aiToggleBtn');
   const aiBtnState = document.getElementById('aiBtnState');
   const aiDepthInput = document.getElementById('aiDepthInput');
-  const aiMinInput = document.getElementById('aiMinInput');
-  const aiMaxInput = document.getElementById('aiMaxInput');
   const AI_CONFIG_KEY = 'zerosum_ai_config_v1';
 
   let aiEnabled = false;
@@ -1438,24 +1434,12 @@
     let depth = parseInt(aiDepthInput && aiDepthInput.value, 10);
     if(!Number.isFinite(depth)) depth = 3;
     depth = Math.max(1, Math.min(20, depth));
-
-    let minMs = parseFloat(aiMinInput && aiMinInput.value);
-    if(!Number.isFinite(minMs)) minMs = 150;
-    minMs = Math.max(0, Math.min(5000, minMs));
-
-    let maxMs = parseFloat(aiMaxInput && aiMaxInput.value);
-    if(!Number.isFinite(maxMs)) maxMs = 400;
-    maxMs = Math.max(10, Math.min(5000, maxMs));
-    if(maxMs < minMs) maxMs = minMs; // max should never be tighter than min
-
-    return { depth, minMs, maxMs };
+    return { depth };
   }
 
   function reflectAiConfig(){
     const cfg = aiConfig();
     if(aiDepthInput) aiDepthInput.value = cfg.depth;
-    if(aiMinInput) aiMinInput.value = cfg.minMs;
-    if(aiMaxInput) aiMaxInput.value = cfg.maxMs;
   }
 
   function saveAiConfig(){
@@ -1469,8 +1453,6 @@
       const data = JSON.parse(raw);
       if(!data) return;
       if(Number.isFinite(data.depth) && aiDepthInput) aiDepthInput.value = data.depth;
-      if(Number.isFinite(data.minMs) && aiMinInput) aiMinInput.value = data.minMs;
-      if(Number.isFinite(data.maxMs) && aiMaxInput) aiMaxInput.value = data.maxMs;
     }catch(e){ /* ignore */ }
   }
 
@@ -1498,29 +1480,22 @@
       scheduleAiMove(120);
       return;
     }
-    const { depth, minMs, maxMs } = aiConfig();
-    const t0 = performance.now();
-    const dir = pickBestMove(depth, maxMs);
-    const elapsed = performance.now() - t0;
-    const wait = Math.max(0, minMs - elapsed);
-    aiTimer = setTimeout(() => {
-      if(!aiEnabled) return;
-      if(!dir){
-        // No legal move -- the game is effectively over; stop spinning.
-        setAiEnabled(false);
-        return;
-      }
-      const ok = doMove(dir);
-      if(!ok) shakeBoard();
-      scheduleAiMove(30);
-    }, wait);
+    const { depth } = aiConfig();
+    const dir = pickBestMove(depth);
+    if(!dir){
+      // No legal move -- the game is effectively over; stop spinning.
+      setAiEnabled(false);
+      return;
+    }
+    const ok = doMove(dir);
+    if(!ok) shakeBoard();
+    scheduleAiMove(30);
   }
 
   if(aiToggleBtn) aiToggleBtn.addEventListener('click', () => setAiEnabled(!aiEnabled));
-  [aiDepthInput, aiMinInput, aiMaxInput].forEach(inp => {
-    if(!inp) return;
-    inp.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
-  });
+  if(aiDepthInput){
+    aiDepthInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
+  }
   loadAiConfig();
   reflectAiConfig();
 
