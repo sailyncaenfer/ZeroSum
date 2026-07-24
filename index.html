@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>ZEROSUM</title>
+<title>ZeroSum</title>
 <style>
   :root{
     --bg: #121213;
@@ -73,15 +73,27 @@
     position:relative;
   }
   .title .zero{
-    color: var(--pos-bg);
+    color: var(--neg-bg);
     -webkit-text-stroke: 0.14vmin #3a3a3a;
     text-stroke: 0.14vmin #3a3a3a;
+    cursor: default;
   }
   .title .sum{
-    color: var(--neg-bg);
+    color: var(--pos-bg);
+    -webkit-text-stroke: 0.14vmin #cfcfcf;
+    text-stroke: 0.14vmin #cfcfcf
+  }
+  .title.nnzm .zero{
+    color: var(--pos-bg);
     -webkit-text-stroke: 0.14vmin #cfcfcf;
     text-stroke: 0.14vmin #cfcfcf;
   }
+  .title.nnzm .sum{
+    color: var(--neg-bg);
+    -webkit-text-stroke: 0.14vmin #3a3a3a;
+    text-stroke: 0.14vmin #3a3a3a;
+  }
+
   .title-sub{
     font-size: 1.5vmin;
     letter-spacing: 0.2em;
@@ -188,6 +200,15 @@
   .tile.shake{
     animation: shake 0.28s ease;
   }
+  .tile.pulse{
+    animation: pulse 0.22s cubic-bezier(.4,0,.2,1);
+    z-index: 3;
+  }
+  @keyframes pulse{
+    0%{ transform: scale(1); }
+    45%{ transform: scale(1.18); }
+    100%{ transform: scale(1); }
+  }
   @keyframes shake{
     0%,100%{ transform: translateX(0); }
     25%{ transform: translateX(-1.2vmin); }
@@ -215,6 +236,12 @@
     flex-direction:column;
     align-items:center;
     gap: 1.3vmin;
+    /* Fixed width = the divider's width (the widest possible child), so the
+       column never resizes depending on whether a bag-separator happens to
+       be visible in the current preview window. Without this, the board
+       (which sits to the left, in a row centered as a whole) would shift
+       left/right as the queue's content changed width. */
+    width: calc(var(--cellsize) * 1.0);
   }
 
   .preview-list .preview-divider{
@@ -451,8 +478,8 @@
     </div>
 
     <div class="board-col">
-        <div class="title">
-            <span class="zero">Zero</span><span class="sum">Sum</span>
+        <div class="title" id="titleEl">
+            <span class="zero" id="titleZero">Zero</span><span class="sum" id="titleSum">Sum</span>
             <div class="title-sub">Cancel Exact Opposites</div>
         </div>
 
@@ -484,13 +511,19 @@
       <p><span class="swatch pos">5</span> Black tiles hold <b>positive</b> numbers. <span class="swatch neg">5</span> White tiles hold <b>negative</b> numbers. Every tile is drawn from a shuffled deck of the values &minus;10 through 10 (0 is never dealt on its own), so you'll always see a mix of both colors.</p>
 
       <h3>Cancelling</h3>
-      <p>When a move pushes two tiles together, they interact only if they're <b>exact opposites</b> &mdash; equal magnitude, mismatched color, like <span class="swatch pos">7</span> and <span class="swatch neg">7</span>. That pair cancels out completely and both tiles vanish from the board. Any other pairing &mdash; same value, same color, or unrelated numbers &mdash; just blocks and stacks up without merging.</p>
+      <p>When a move pushes two tiles together, they interact only if they're <b>exact opposites</b> &mdash; equal magnitude, mismatched color, like <span class="swatch pos">7</span> and <span class="swatch neg">7</span>. That pair cancels out completely and both tiles vanish from the board.</p>
+
+      <h3>Combining</h3>
+      <p>Small tiles are flexible: any <span class="swatch pos">1</span>, <span class="swatch pos">2</span>, or <span class="swatch pos">3</span> (or its negative) can fuse with whatever tile it's pushed into, as long as the result doesn't exceed the current maximum tile value. The two tiles become one tile holding their sum. Any other pairing &mdash; same value, same color, or unrelated numbers above 3 &mdash; just blocks and stacks up without merging.</p>
 
       <h3>Scoring</h3>
-      <p>Each cancellation scores <b>10&times;</b> the tile's magnitude. Cancelling a pair of 7s scores 70 points.</p>
+      <p>Each cancellation scores <b>10&times;</b> the tile's magnitude &mdash; cancelling a pair of 7s scores 70 points. A combine merge instead scores the magnitude of the smaller tile (1, 2, or 3 points).</p>
 
       <h3>Next Tiles</h3>
-      <p>The column beside the board previews the next three tiles that will be dealt in. Tiles are drawn from a shuffled bag of every value from &minus;10 to 10 (excluding 0); once a bag runs out, a fresh one is shuffled. A dashed line in the preview marks the start of that next bag.</p>
+      <p>The column beside the board previews the next few tiles that will be dealt in. Tiles are drawn from a shuffled bag of every value up to the current maximum (starting at &minus;10 to 10, excluding 0); once a bag runs out, a fresh one is shuffled. A dashed line in the preview marks the start of that next bag.</p>
+
+      <h3>Raising the Ceiling</h3>
+      <p>Every 10,000 points raises the maximum tile value by 1. You'll always finish the bag you're currently drawing from before any bigger tiles start appearing &mdash; the wider range only applies to bags shuffled after that.</p>
 
       <h3>Game Over</h3>
       <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
@@ -514,7 +547,7 @@
   let anyBlockGenerated = false;
 
   function newShuffledBlock(){
-    const range = 10;
+    const range = currentMaxValue();  
     const block = [];
     for(let v=-range; v<=range; v++){ if(v!==0) block.push(v); }
     for(let i=block.length-1;i>0;i--){
@@ -568,14 +601,33 @@
   let score = 0;
   let best = 0;
   let busy = false;
-  const SAVE_KEY = 'zerosum_save_v2';
-  try{ best = parseInt(localStorage.getItem('zerosum_best_v2')||'0',10) || 0; }catch(e){ best = 0; }
+
+  // ---------------- merge mode ----------------
+  // 'zerosum' = cancels + 1/2/3 combine merges. 'nnzm' = cancels only.
+  // Each mode keeps its own save slot and best score so switching never
+  // clobbers the other variant's progress.
+  const MODE_KEY = 'zerosum_mode_v1';
+  const SAVE_KEYS = { zerosum: 'zerosum_save_v2', nnzm: 'zerosum_save_nnzm_v1' };
+  const BEST_KEYS = { zerosum: 'zerosum_best_v2', nnzm: 'zerosum_best_nnzm_v1' };
+  let mode = 'zerosum';
+  let modeSwitching = false;
+  try{
+    const savedMode = localStorage.getItem(MODE_KEY);
+    if(savedMode === 'zerosum' || savedMode === 'nnzm') mode = savedMode;
+  }catch(e){ /* ignore */ }
+
+  function saveKeyFor(m){ return SAVE_KEYS[m]; }
+  function bestKeyFor(m){ return BEST_KEYS[m]; }
+  function combineEnabled(){ return mode === 'zerosum'; }
+
+  try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
 
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
   const overlayEl = document.getElementById('overlay');
   const previewPanelEl = document.getElementById('previewPanel');
+  const titleEl = document.getElementById('titleEl');
   let gameOver = false;
 
   function occupied(r,c){
@@ -593,8 +645,32 @@
   // A pair only interacts if they're exact opposites (equal magnitude,
   // opposite sign) -- they cancel out and vanish. Same-value pairs and
   // anything else just block each other, no merging.
+  // This strict "cancel-only" check is kept separate (used only for the
+  // initial-deal fairness scan) so that the much more common combine-merges
+  // below don't make it effectively impossible to find a fair starting board.
   function canMerge(a,b){
     return a + b === 0;
+  }
+
+  // Full merge evaluation used during real gameplay and move-validity checks.
+  // Returns null if the pair doesn't interact, otherwise:
+  //   { type:'cancel',  scoreGain }         -- exact opposites, both vanish
+  //   { type:'combine', value, scoreGain }  -- one tile is +-1/2/3, fuses into a sum
+  // Combine merges only fire when at least one tile has magnitude <= 3, and
+  // only if the resulting sum doesn't exceed the current maximum tile value
+  // (the same cap that governs the 10k-score bag stepping).
+  function evaluateMerge(a, b){
+    if(a + b === 0){
+      return { type:'cancel', scoreGain: Math.abs(a) * 10 };
+    }
+    if(!combineEnabled()) return null;
+    if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= currentMaxValue()){
+        return { type:'combine', value: sum, scoreGain: Math.min(Math.abs(a), Math.abs(b)) };
+      }
+    }
+    return null;
   }
 
   // ---------------- board rendering ----------------
@@ -649,6 +725,17 @@
     el.textContent = Math.abs(tile.value);
     el.className = 'tile ' + (tile.value > 0 ? 'pos' : 'neg') + ' ' + fontSizeClassFor(tile.value);
     positionEl(el, tile.r, tile.c);
+  }
+
+  function pulseTile(tile){
+    const el = tile.el;
+    if(!el) return;
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+    el.addEventListener('animationend', () => {
+      el.classList.remove('pulse');
+    }, {once:true});
   }
 
   function removeTileEl(tile, animate){
@@ -707,18 +794,18 @@
         tileIdCounter: tileIdCounter,
         gameOver: gameOver
       };
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      localStorage.setItem(saveKeyFor(mode), JSON.stringify(data));
     }catch(e){ /* storage unavailable, ignore */ }
   }
 
   function clearSavedState(){
-    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+    try{ localStorage.removeItem(saveKeyFor(mode)); }catch(e){}
   }
 
   function loadState(){
     let data;
     try{
-      const raw = localStorage.getItem(SAVE_KEY);
+      const raw = localStorage.getItem(saveKeyFor(mode));
       if(!raw) return false;
       data = JSON.parse(raw);
     }catch(e){ return false; }
@@ -748,6 +835,10 @@
     renderScores();
     renderPreview();
     return true;
+  }
+
+  function currentMaxValue(){
+    return 10 + Math.floor(score / 10000);
   }
 
   function valuesToBoard(values){
@@ -951,11 +1042,14 @@
         if(arr[i+1]===null || arr[i+1]===undefined) continue;
         if(arr[i]===null || arr[i]===undefined){
           arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
-        } else if(!mergedInto[i] && canMerge(arr[i], arr[i+1])){
-          arr[i] = null;
-          arr[i+1] = null;
-          mergedInto[i] = true;
-          moved = true;
+        } else if(!mergedInto[i]){
+          const result = evaluateMerge(arr[i], arr[i+1]);
+          if(result){
+            arr[i] = result.type === 'combine' ? result.value : null;
+            arr[i+1] = null;
+            mergedInto[i] = true;
+            moved = true;
+          }
         }
       }
     }
@@ -980,6 +1074,7 @@
     let moved = false;
     let scoreGain = 0;
     const removedIds = new Set();
+    const combinedIds = new Set();
 
     for(const line of lines){
       const lineTiles = line.map(p => occupied(p.r, p.c) || null);
@@ -991,15 +1086,25 @@
           lineTiles[i] = lineTiles[i+1];
           lineTiles[i+1] = null;
           moved = true;
-        } else if(!mergedInto[i] && canMerge(lineTiles[i].value, lineTiles[i+1].value)){
+        } else if(!mergedInto[i]){
           const a = lineTiles[i], b = lineTiles[i+1];
-          scoreGain += Math.abs(a.value) * 10;
-          removedIds.add(a.id);
-          removedIds.add(b.id);
-          lineTiles[i] = null;
-          lineTiles[i+1] = null;
-          mergedInto[i] = true;
-          moved = true;
+          const result = evaluateMerge(a.value, b.value);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              removedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i] = null;
+              lineTiles[i+1] = null;
+            } else {
+              a.value = result.value;
+              combinedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i+1] = null;
+            }
+            mergedInto[i] = true;
+            moved = true;
+          }
         }
       }
 
@@ -1017,6 +1122,7 @@
     tiles.forEach(t => {
       if(removedIds.has(t.id)) return;
       updateTileEl(t);
+      if(combinedIds.has(t.id)) pulseTile(t);
     });
 
     // animate out removed tiles, then clean up
@@ -1026,7 +1132,7 @@
     tiles = tiles.filter(t => !removedIds.has(t.id));
 
     score += scoreGain;
-    if(score > best){ best = score; try{ localStorage.setItem('zerosum_best_v2', String(best)); }catch(e){} }
+    if(score > best){ best = score; try{ localStorage.setItem(bestKeyFor(mode), String(best)); }catch(e){} }
     renderScores();
     if(scoreGain > 0) bumpScore();
 
@@ -1123,7 +1229,71 @@
   const restartBtn = document.getElementById('restartBtn');
   if(restartBtn) restartBtn.addEventListener('click', () => newGame());
 
+  // ---------------- merge-mode toggle ----------------
+  function applyModeVisuals(){
+    if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
+  }
+
+  function switchMode(newMode){
+    if(newMode === mode || modeSwitching) return;
+    modeSwitching = true;
+    busy = true;
+
+    mode = newMode;
+    try{ localStorage.setItem(MODE_KEY, mode); }catch(e){}
+    applyModeVisuals();
+    try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
+
+    // Animate the current board out (the same vanish animation used when
+    // tiles cancel during a move), then swap in the new rule-set's board
+    // (or a fresh game) with the same spawn-in animation used for new
+    // tiles during play, instead of an instant silent swap.
+    const oldTiles = tiles.slice();
+    oldTiles.forEach(t => removeTileEl(t, true));
+    tiles = [];
+
+    const outDelay = oldTiles.length ? 220 : 0;
+    setTimeout(() => {
+      if(!loadState()) newGame();
+      tiles.forEach(t => {
+        const el = t.el;
+        if(!el || el.classList.contains('spawn')) return;
+        el.classList.add('spawn');
+        el.addEventListener('animationend', () => {
+          el.classList.remove('spawn');
+        }, {once:true});
+      });
+      busy = false;
+      modeSwitching = false;
+    }, outDelay);
+  }
+
+  const titleZeroEl = document.getElementById('titleZero');
+  const titleSumEl = document.getElementById('titleSum');
+  if(titleZeroEl){
+    titleZeroEl.addEventListener('click', () => switchMode('nnzm'));
+  }
+  if(titleSumEl){
+    titleSumEl.addEventListener('click', () => switchMode('zerosum'));
+  }
+
+  applyModeVisuals();
   if(!loadState()) newGame();
+
+  // ---------------- debug hook (remove before shipping) ----------------
+  window.debug = {
+    setScore(v){
+      score = v;
+      if(score > best){ best = score; try{ localStorage.setItem(bestKeyFor(mode), String(best)); }catch(e){} }
+      renderScores();
+      renderPreview();
+      saveState();
+      console.log('score set to', score, '- current max tile value:', currentMaxValue());
+    },
+    getScore(){ return score; },
+    getMaxValue(){ return currentMaxValue(); },
+    getDeck(){ return deck; }
+  };
 })();
 </script>
 </body>
