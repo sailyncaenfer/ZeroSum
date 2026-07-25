@@ -454,9 +454,11 @@
         <fieldset>
           <legend>Expectimax AI</legend>
           <div class="field"><label for="cfg_aiEnabled">Auto-play (AI plays continuously)</label><input type="checkbox" id="cfg_aiEnabled"></div>
-          <div class="field"><label for="cfg_aiDepth">Search depth</label><input type="number" id="cfg_aiDepth" min="1" max="3" step="1"></div>
-          <div class="field"><label for="cfg_aiSpeed">Move delay (ms)</label><input type="number" id="cfg_aiSpeed" min="50" max="3000" step="50"></div>
-          <p class="sub-note">The AI runs a depth-limited expectimax search: it maximizes its own move, averages over sampled random spawns (weighted toward small combinable values and a representative large value), and scores boards by empty space, total merge potential, and total remaining magnitude. Use <b>AI Step</b> to make one AI move at a time without auto-play.</p>
+          <div class="field"><label for="cfg_aiDepth">Max search depth<span class="hint">Iterative deepening's target ceiling — may be exceeded to satisfy min think time, up to a hard safety cap</span></label><input type="number" id="cfg_aiDepth" min="1" max="6" step="1"></div>
+          <div class="field"><label for="cfg_aiMinTime">Min think time (ms)<span class="hint">Keep deepening past max depth until at least this much time has elapsed</span></label><input type="number" id="cfg_aiMinTime" min="0" max="10000" step="50"></div>
+          <div class="field"><label for="cfg_aiMaxTime">Max think time (ms)<span class="hint">Hard cutoff — stops deepening once this much time has elapsed, even mid-depth-ceiling</span></label><input type="number" id="cfg_aiMaxTime" min="50" max="10000" step="50"></div>
+          <div class="field"><label for="cfg_aiSpeed">Move delay (ms)<span class="hint">Pause between moves in auto-play, separate from think time</span></label><input type="number" id="cfg_aiSpeed" min="50" max="3000" step="50"></div>
+          <p class="sub-note">The AI uses iterative deepening expectimax: it searches depth 1, then 2, then 3, and so on, each time maximizing its own move and averaging over sampled random spawns (weighted toward small combinable values and a representative large value), scoring boards by empty space, total merge potential, and total remaining magnitude. It keeps deepening as long as elapsed time is under the max, stops at the max depth once the min time is satisfied, and always returns the best move found so far if time runs out mid-search. Use <b>AI Step</b> to make one AI move at a time without auto-play.</p>
         </fieldset>
 
         <fieldset>
@@ -533,7 +535,9 @@
     valueMax: 10,
     rerollDepth: 5,
     aiEnabled: false,
-    aiDepth: 2,
+    aiDepth: 3,
+    aiMinTime: 100,
+    aiMaxTime: 500,
     aiSpeed: 400
   };
 
@@ -1063,6 +1067,24 @@
   }
 
   // ================= EXPECTIMAX AI =================
+  // The search runs inside a Web Worker so a deep/slow search never blocks
+  // the main thread — the page, animations, and input stay responsive no
+  // matter how long the AI takes to think. If Workers aren't available for
+  // some reason, it falls back to running on the main thread but yields
+  // back to the browser between each depth of the iterative deepening loop
+  // so the page still doesn't fully lock up.
+
+  // Hard safety ceiling on search depth regardless of min-time settings —
+  // branching factor grows fast enough that unbounded deepening could run
+  // for a very long time, so min-time can force extra depth but never past
+  // this.
+  const AI_ABSOLUTE_DEPTH_CAP = 6;
+
+  function nowMs(){
+    return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  }
+
+  // ---- shared pure helpers (also used by the main-thread fallback) ----
   function simulateMoveValues(values, dir){
     const lines = getLineCoords(dir);
     const board = values.slice();
@@ -1169,31 +1191,287 @@
     return total / sampled.length;
   }
 
-  function chooseAIMove(){
+  // ---- main-thread fallback: same iterative deepening, but yields to
+  // the browser between depths via setTimeout(0) so it can't fully
+  // freeze the tab even without a Worker ----
+  async function chooseAIMoveMainThreadAsync(){
     const values = boardValues();
-    let bestDir = null, bestVal = -Infinity;
-    for(const dir of ['left','right','up','down']){
-      const {board, moved} = simulateMoveValues(values, dir);
-      if(!moved) continue;
-      const depth = Math.max(1, Math.min(3, Math.round(CONFIG.aiDepth))) - 1;
-      const val = expectiChance(board, depth);
-      if(val > bestVal){ bestVal = val; bestDir = dir; }
+    const maxDepth = Math.max(1, Math.min(AI_ABSOLUTE_DEPTH_CAP, Math.round(CONFIG.aiDepth) || 1));
+    const minTime = Math.max(0, CONFIG.aiMinTime || 0);
+    const maxTime = Math.max(minTime, CONFIG.aiMaxTime || 0, 1);
+
+    const start = nowMs();
+    let bestDir = null;
+    let depth = 1;
+
+    while(depth <= AI_ABSOLUTE_DEPTH_CAP){
+      const elapsed = nowMs() - start;
+      if(elapsed >= maxTime) break;
+      if(depth > maxDepth && elapsed >= minTime) break;
+
+      let dirAtDepth = null, valAtDepth = -Infinity;
+      for(const dir of ['left','right','up','down']){
+        const {board, moved} = simulateMoveValues(values, dir);
+        if(!moved) continue;
+        const val = expectiChance(board, depth - 1);
+        if(val > valAtDepth){ valAtDepth = val; dirAtDepth = dir; }
+      }
+
+      if(!dirAtDepth) break; // no legal moves at all
+      bestDir = dirAtDepth;
+
+      if(nowMs() - start >= maxTime) break;
+      depth++;
+      await new Promise(resolve => setTimeout(resolve, 0)); // yield to the browser
     }
+
     return bestDir;
   }
 
+  // ---- Web Worker: self-contained copy of the same search, running off
+  // the main thread. Communicates via plain data (board values + config
+  // primitives), never DOM or shared state. ----
+  const AI_WORKER_SRC = `
+    function getLineCoordsW(dir, ROWS, COLS){
+      const lines = [];
+      if(dir==='left'){ for(let r=0;r<ROWS;r++){ const line=[]; for(let c=0;c<COLS;c++) line.push(r*COLS+c); lines.push(line); } }
+      else if(dir==='right'){ for(let r=0;r<ROWS;r++){ const line=[]; for(let c=COLS-1;c>=0;c--) line.push(r*COLS+c); lines.push(line); } }
+      else if(dir==='up'){ for(let c=0;c<COLS;c++){ const line=[]; for(let r=0;r<ROWS;r++) line.push(r*COLS+c); lines.push(line); } }
+      else if(dir==='down'){ for(let c=0;c<COLS;c++){ const line=[]; for(let r=ROWS-1;r>=0;r--) line.push(r*COLS+c); lines.push(line); } }
+      return lines;
+    }
+    function evaluateMergeW(a, b, ctx){
+      if(ctx.cancelEnabled && a + b === 0) return { type:'cancel' };
+      if(!ctx.combineEnabled) return null;
+      if(Math.abs(a) <= ctx.combineThreshold || Math.abs(b) <= ctx.combineThreshold){
+        const sum = a + b;
+        if(sum !== 0 && Math.abs(sum) <= ctx.currentMaxVal) return { type:'combine', value: sum };
+      }
+      return null;
+    }
+    function simulateMoveValuesW(values, dir, ROWS, COLS, ctx){
+      const lines = getLineCoordsW(dir, ROWS, COLS);
+      const board = values.slice();
+      let moved = false;
+      for(const line of lines){
+        const arr = line.map(i => board[i]);
+        const mergedInto = new Array(arr.length).fill(false);
+        for(let i=0;i<arr.length-1;i++){
+          if(arr[i+1]==null) continue;
+          if(arr[i]==null){ arr[i]=arr[i+1]; arr[i+1]=null; moved=true; }
+          else if(!mergedInto[i]){
+            const result = evaluateMergeW(arr[i], arr[i+1], ctx);
+            if(result){
+              arr[i] = result.type === 'combine' ? result.value : null;
+              arr[i+1] = null;
+              mergedInto[i] = true;
+              moved = true;
+            }
+          }
+        }
+        for(let i=0;i<line.length;i++){ board[line[i]] = arr[i]; }
+      }
+      return {board, moved};
+    }
+    function evaluateHeuristicW(values, ROWS, COLS, ctx){
+      let empty = 0, totalAbs = 0, mergePotential = 0;
+      for(let i=0;i<values.length;i++){
+        const v = values[i];
+        if(v == null){ empty++; continue; }
+        totalAbs += Math.abs(v);
+      }
+      for(let r=0;r<ROWS;r++){
+        for(let c=0;c<COLS;c++){
+          const v = values[r*COLS+c];
+          if(v == null) continue;
+          const neighbors = [[0,1],[1,0]];
+          for(const [dr,dc] of neighbors){
+            const nr=r+dr, nc=c+dc;
+            if(nr>=ROWS || nc>=COLS) continue;
+            const w = values[nr*COLS+nc];
+            if(w == null) continue;
+            if(ctx.cancelEnabled && v+w===0){
+              mergePotential += Math.abs(v) * 2;
+            } else if(ctx.combineEnabled && (Math.abs(v)<=ctx.combineThreshold || Math.abs(w)<=ctx.combineThreshold) && Math.abs(v+w) <= ctx.currentMaxVal){
+              mergePotential += Math.min(Math.abs(v), Math.abs(w));
+            }
+          }
+        }
+      }
+      return empty*8 - totalAbs*0.6 + mergePotential*3;
+    }
+    function chanceCandidatesW(ctx){
+      const lo = ctx.spawnLo, hi = ctx.spawnHi;
+      const th = Math.max(1, Math.min(ctx.combineThreshold || 1, Math.max(Math.abs(lo), hi) || 1));
+      const bigMag = Math.max(th+1, Math.round(hi*0.6)) || 1;
+      return [
+        {v: th, p:0.3}, {v:-th, p:0.3},
+        {v: bigMag, p:0.2}, {v:-bigMag, p:0.2}
+      ];
+    }
+    function expectiMoveW(values, depth, ROWS, COLS, ctx){
+      let best = -Infinity, any = false;
+      for(const dir of ['left','right','up','down']){
+        const {board, moved} = simulateMoveValuesW(values, dir, ROWS, COLS, ctx);
+        if(!moved) continue;
+        any = true;
+        const val = depth <= 0 ? evaluateHeuristicW(board, ROWS, COLS, ctx) : expectiChanceW(board, depth-1, ROWS, COLS, ctx);
+        if(val > best) best = val;
+      }
+      if(!any) return evaluateHeuristicW(values, ROWS, COLS, ctx) - 1000;
+      return best;
+    }
+    function expectiChanceW(values, depth, ROWS, COLS, ctx){
+      const empties = [];
+      for(let i=0;i<values.length;i++) if(values[i]==null) empties.push(i);
+      if(empties.length === 0) return evaluateHeuristicW(values, ROWS, COLS, ctx);
+      const maxSamples = 3;
+      let sampled = empties;
+      if(empties.length > maxSamples){
+        sampled = [];
+        const copy = empties.slice();
+        for(let i=0;i<maxSamples;i++){
+          const idx = Math.floor(Math.random()*copy.length);
+          sampled.push(copy.splice(idx,1)[0]);
+        }
+      }
+      const candidates = chanceCandidatesW(ctx);
+      let total = 0;
+      for(const cellIdx of sampled){
+        let cellVal = 0;
+        for(const cand of candidates){
+          const nv = values.slice();
+          nv[cellIdx] = cand.v;
+          cellVal += cand.p * expectiMoveW(nv, depth, ROWS, COLS, ctx);
+        }
+        total += cellVal;
+      }
+      return total / sampled.length;
+    }
+    function nowMsW(){ return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+    function chooseAIMoveW(payload){
+      const { values, ROWS, COLS, maxDepth, minTime, maxTime, absoluteCap } = payload;
+      const ctx = payload;
+      const start = nowMsW();
+      let bestDir = null;
+      let depth = 1;
+      while(depth <= absoluteCap){
+        const elapsed = nowMsW() - start;
+        if(elapsed >= maxTime) break;
+        if(depth > maxDepth && elapsed >= minTime) break;
+        let dirAtDepth = null, valAtDepth = -Infinity;
+        for(const dir of ['left','right','up','down']){
+          const {board, moved} = simulateMoveValuesW(values, dir, ROWS, COLS, ctx);
+          if(!moved) continue;
+          const val = expectiChanceW(board, depth - 1, ROWS, COLS, ctx);
+          if(val > valAtDepth){ valAtDepth = val; dirAtDepth = dir; }
+        }
+        if(!dirAtDepth) break;
+        bestDir = dirAtDepth;
+        if(nowMsW() - start >= maxTime) break;
+        depth++;
+      }
+      return bestDir;
+    }
+    self.onmessage = function(e){
+      const msg = e.data;
+      if(!msg || msg.type !== 'compute') return;
+      let dir = null;
+      try{ dir = chooseAIMoveW(msg.payload); }catch(err){ dir = null; }
+      self.postMessage({ type:'result', id: msg.id, dir });
+    };
+  `;
+
+  let aiWorker = null;
+  let aiWorkerFailed = false;
+  function getAIWorker(){
+    if(aiWorker || aiWorkerFailed) return aiWorker;
+    try{
+      const blob = new Blob([AI_WORKER_SRC], {type: 'application/javascript'});
+      aiWorker = new Worker(URL.createObjectURL(blob));
+      aiWorker.addEventListener('error', () => { aiWorker = null; aiWorkerFailed = true; });
+    }catch(e){
+      aiWorker = null;
+      aiWorkerFailed = true;
+    }
+    return aiWorker;
+  }
+
+  let aiRequestSeq = 0;
+
+  function buildAIPayload(){
+    const [lo, hi] = spawnRange();
+    return {
+      values: boardValues(),
+      ROWS, COLS,
+      cancelEnabled: CONFIG.cancelEnabled,
+      combineEnabled: CONFIG.combineEnabled,
+      combineThreshold: CONFIG.combineThreshold,
+      currentMaxVal: currentMaxValue(),
+      spawnLo: lo,
+      spawnHi: hi,
+      maxDepth: Math.max(1, Math.min(AI_ABSOLUTE_DEPTH_CAP, Math.round(CONFIG.aiDepth) || 1)),
+      minTime: Math.max(0, CONFIG.aiMinTime || 0),
+      maxTime: Math.max(Math.max(0, CONFIG.aiMinTime || 0), CONFIG.aiMaxTime || 0, 1),
+      absoluteCap: AI_ABSOLUTE_DEPTH_CAP
+    };
+  }
+
+  function requestAIMoveFromWorker(worker, payload){
+    return new Promise((resolve) => {
+      const id = ++aiRequestSeq;
+      let settled = false;
+      const finish = (dir) => {
+        if(settled) return;
+        settled = true;
+        worker.removeEventListener('message', handleMessage);
+        resolve(dir);
+      };
+      const handleMessage = (e) => {
+        const msg = e.data;
+        if(!msg || msg.type !== 'result' || msg.id !== id) return;
+        finish(msg.dir);
+      };
+      worker.addEventListener('message', handleMessage);
+      try{
+        worker.postMessage({ type:'compute', id, payload });
+      }catch(err){
+        finish(null);
+      }
+    });
+  }
+
+  // Public entry point: always async, never blocks the calling thread for
+  // more than a tick or two even when the AI is "thinking" for seconds.
+  async function chooseAIMove(){
+    const worker = getAIWorker();
+    if(worker){
+      return requestAIMoveFromWorker(worker, buildAIPayload());
+    }
+    return chooseAIMoveMainThreadAsync();
+  }
+
   let aiTimer = null;
+  let aiThinking = false;
   const aiToggleBtn = document.getElementById('aiToggleBtn');
+  const aiStepBtnEl = document.getElementById('aiStepBtn');
+
   function startAI(){
     if(aiTimer || gameOver) return;
     CONFIG.aiEnabled = true;
     aiToggleBtn.textContent = 'AI: On';
     aiToggleBtn.classList.add('toggled');
-    aiTimer = setInterval(() => {
-      if(gameOver || busy){ return; }
-      const dir = chooseAIMove();
-      if(!dir){ stopAI(); return; }
-      doMove(dir);
+    aiTimer = setInterval(async () => {
+      if(gameOver || busy || aiThinking) return;
+      aiThinking = true;
+      try{
+        const dir = await chooseAIMove();
+        if(gameOver){ return; }
+        if(!dir){ stopAI(); return; }
+        doMove(dir);
+      } finally {
+        aiThinking = false;
+      }
     }, Math.max(50, CONFIG.aiSpeed));
   }
   function stopAI(){
@@ -1205,10 +1483,20 @@
   function toggleAI(){ if(aiTimer) stopAI(); else startAI(); persistConfig(); }
   aiToggleBtn.addEventListener('click', toggleAI);
 
-  document.getElementById('aiStepBtn').addEventListener('click', () => {
-    if(gameOver || busy) return;
-    const dir = chooseAIMove();
-    if(dir) doMove(dir); else shakeBoard();
+  aiStepBtnEl.addEventListener('click', async () => {
+    if(gameOver || busy || aiThinking) return;
+    aiThinking = true;
+    const originalLabel = aiStepBtnEl.textContent;
+    aiStepBtnEl.textContent = 'Thinking…';
+    aiStepBtnEl.disabled = true;
+    try{
+      const dir = await chooseAIMove();
+      if(dir) doMove(dir); else shakeBoard();
+    } finally {
+      aiThinking = false;
+      aiStepBtnEl.textContent = originalLabel;
+      aiStepBtnEl.disabled = false;
+    }
   });
 
   // ---------------- input ----------------
