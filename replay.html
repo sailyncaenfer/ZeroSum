@@ -423,7 +423,7 @@
     if(hasFinalQueue){
       for(let i=0;i<QUEUE_PREVIEW_LEN;i++) finalQueue.push(readQueueEntry(br));
     }
-    return { mode, initialSpawns, initialQueue, moves, finalQueue, hasQueue, hasFinalQueue };
+    return { mode, initialSpawns, initialQueue, moves, finalQueue, hasQueue, hasPerMoveQueue, hasFinalQueue };
   }
 
   // ================= Game-rule simulation (pure, no DOM) =================
@@ -512,6 +512,36 @@
   }
 
   // ================= Build full state timeline from a parsed replay =================
+  // For v3 replays we no longer have a per-move queue snapshot -- instead we
+  // reconstruct the "Next" preview at every step from the tiles that go on
+  // to actually spawn later in the replay. A move can only draw from the
+  // very front of the deck, so the sequence of recorded spawn values *is*
+  // the sequence of deck draws; the preview at any point is just the next
+  // QUEUE_PREVIEW_LEN spawns still to come. Near the end of the recording,
+  // once future moves run out, the remainder is filled in from the single
+  // save-time snapshot (finalQueue), which picks up exactly where the
+  // recorded spawns leave off.
+  function queueForStateIndex(replay, stateIndex){
+    // Legacy v2 replays recorded a real queue snapshot (with true bag-boundary
+    // flags) at every step -- prefer that when it's present.
+    if(replay.hasPerMoveQueue){
+      if(stateIndex === 0) return replay.initialQueue || [];
+      return (replay.moves[stateIndex - 1] && replay.moves[stateIndex - 1].queue) || [];
+    }
+    const out = [];
+    const moves = replay.moves;
+    for(let i = stateIndex; i < moves.length && out.length < QUEUE_PREVIEW_LEN; i++){
+      out.push({ value: moves[i].spawn.value, boundary: false });
+    }
+    if(out.length < QUEUE_PREVIEW_LEN && replay.hasFinalQueue){
+      const finalQueue = replay.finalQueue || [];
+      for(let i = 0; i < finalQueue.length && out.length < QUEUE_PREVIEW_LEN; i++){
+        out.push(finalQueue[i]);
+      }
+    }
+    return out;
+  }
+
   function buildTimeline(replay){
     let idCounter = 1;
     const states = []; // { tiles:[{id,value,r,c}], score, dir|null, queue:[{value,boundary}...] }
@@ -523,9 +553,10 @@
       c: s.pos % SIZE
     }));
     let score = 0;
-    states.push({ tiles: tiles.map(t=>({...t})), score, dir: null, queue: replay.initialQueue || [] });
+    states.push({ tiles: tiles.map(t=>({...t})), score, dir: null, queue: queueForStateIndex(replay, 0) });
 
-    for(const move of replay.moves){
+    for(let m = 0; m < replay.moves.length; m++){
+      const move = replay.moves[m];
       const result = applyMove(tiles, move.dir, replay.mode, score);
       tiles = result.tiles;
       score += result.scoreGain;
@@ -535,16 +566,9 @@
         r: Math.floor(move.spawn.pos / SIZE),
         c: move.spawn.pos % SIZE
       });
-      states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: move.queue || [] });
+      states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: queueForStateIndex(replay, m + 1) });
     }
 
-    // v3 replays only carry a single queue snapshot, taken at save time --
-    // attach it to the last recorded state so it shows up automatically once
-    // the replay reaches the end (the point at which it was saved), instead
-    // of on every step.
-    if(replay.hasFinalQueue && states.length){
-      states[states.length - 1].queue = replay.finalQueue || [];
-    }
     return states;
   }
 
