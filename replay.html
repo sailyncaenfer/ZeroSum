@@ -417,6 +417,10 @@
   }
 
   // ================= Game-rule simulation (pure, no DOM) =================
+  // Same default bonus as the main game: awarded whenever a move clears
+  // every tile from the board before the next spawn.
+  const ZERO_CLEAR_BONUS = 5000;
+
   function combineEnabledFor(mode){ return mode === 'zerosum'; }
 
   function currentMaxValue(score){
@@ -493,6 +497,7 @@
     }
 
     const survivors = tiles.filter(t => !removedIds.has(t.id));
+    if(survivors.length === 0) scoreGain += ZERO_CLEAR_BONUS;
     return { tiles: survivors, scoreGain };
   }
 

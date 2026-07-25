@@ -193,6 +193,38 @@
     0%{ transform: scale(1) rotate(0deg); opacity:1; }
     100%{ transform: scale(0) rotate(25deg); opacity:0; }
   }
+  /* ---------- Zero Clear bonus toast ---------- */
+  .zero-clear-toast{
+    position:absolute;
+    left:50%; top:50%;
+    transform: translate(-50%, -50%) scale(0.7);
+    z-index: 5;
+    pointer-events:none;
+    opacity:0;
+    text-align:center;
+    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-weight: 800;
+    color: var(--accent);
+    text-shadow: 0 0.3vmin 1.2vmin rgba(232,163,61,0.55);
+  }
+  .zero-clear-toast .zc-title{
+    font-size: 5.6vmin;
+    letter-spacing: 0.15vmin;
+  }
+  .zero-clear-toast .zc-bonus{
+    font-size: 3.4vmin;
+    margin-top: 0.4vmin;
+  }
+  .zero-clear-toast.show{
+    animation: zeroClearPop 1.3s cubic-bezier(.2,1,.3,1) both;
+  }
+  @keyframes zeroClearPop{
+    0%{ opacity:0; transform: translate(-50%, -50%) scale(0.6); }
+    18%{ opacity:1; transform: translate(-50%, -50%) scale(1.08); }
+    30%{ transform: translate(-50%, -50%) scale(1); }
+    78%{ opacity:1; transform: translate(-50%, -50%) scale(1); }
+    100%{ opacity:0; transform: translate(-50%, -50%) scale(1.05); }
+  }
   .tile.shake{
     animation: shake 0.28s ease;
   }
@@ -482,6 +514,10 @@
             <div class="board-wrap">
                 <div class="board" id="board"></div>
                 <div class="overlay" id="overlay"></div>
+                <div class="zero-clear-toast" id="zeroClearToast">
+                    <div class="zc-title">ZERO CLEAR</div>
+                    <div class="zc-bonus" id="zeroClearBonusText">+5000</div>
+                </div>
             </div>
 
             <div class="preview-panel">
@@ -589,6 +625,11 @@
     }
   }
 
+  // ---------------- Zero Clear bonus ----------------
+  // Awarded when a move clears every tile from the board (before the next
+  // tile spawns). Default 5000; editable in the sandbox build.
+  const ZERO_CLEAR_BONUS = 5000;
+
   // ---------------- state ----------------
   let tiles = [];
   let score = 0;
@@ -615,6 +656,8 @@
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
   const overlayEl = document.getElementById('overlay');
+  const zeroClearToastEl = document.getElementById('zeroClearToast');
+  const zeroClearBonusTextEl = document.getElementById('zeroClearBonusText');
   const previewPanelEl = document.getElementById('previewPanel');
   const titleEl = document.getElementById('titleEl');
   let gameOver = false;
@@ -862,6 +905,14 @@
     scoreEl.classList.remove('bump');
     void scoreEl.offsetWidth;
     scoreEl.classList.add('bump');
+  }
+
+  function showZeroClearToast(bonus){
+    if(!zeroClearToastEl) return;
+    zeroClearBonusTextEl.textContent = '+' + bonus;
+    zeroClearToastEl.classList.remove('show');
+    void zeroClearToastEl.offsetWidth;
+    zeroClearToastEl.classList.add('show');
   }
 
   // ---------------- next-tiles preview ----------------
@@ -1242,10 +1293,14 @@
     });
     tiles = tiles.filter(t => !removedIds.has(t.id));
 
+    const zeroCleared = tiles.length === 0;
+    if(zeroCleared) scoreGain += ZERO_CLEAR_BONUS;
+
     score += scoreGain;
     if(score > best){ best = score; try{ localStorage.setItem(bestKeyFor(mode), String(best)); }catch(e){} }
     renderScores();
     if(scoreGain > 0) bumpScore();
+    if(zeroCleared) showZeroClearToast(ZERO_CLEAR_BONUS);
 
     const spawned = spawnRandomTile();
     replayLog.moves.push({
