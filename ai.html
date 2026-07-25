@@ -802,8 +802,8 @@
     replayLog = {
       mode: mode,
       initialSpawns: [], // {pos, value}
-      initialQueue: [],   // {value, boundary} snapshot of the preview queue before the first move
-      moves: []           // {dir, spawn: {pos,value}, queue: [{value,boundary}...]}
+      moves: [],          // {dir, spawn: {pos,value}}
+      finalQueue: []      // {value, boundary} snapshot of the preview queue, taken at save time
     };
   }
 
@@ -868,20 +868,17 @@
       bw.writeBits(s.pos, 4);
       writeSignedValue(bw, s.value);
     }
-    for(const q of log.initialQueue){
-      writeQueueEntry(bw, q);
-    }
     bw.writeBits(log.moves.length, 24);
     for(const m of log.moves){
       bw.writeBits(DIR_CODE[m.dir], 2);
       bw.writeBits(m.spawn.pos, 4);
       writeSignedValue(bw, m.spawn.value);
-      for(const q of m.queue){
-        writeQueueEntry(bw, q);
-      }
+    }
+    for(const q of log.finalQueue){
+      writeQueueEntry(bw, q);
     }
     const payload = bw.finish();
-    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x32]); // "ZSR2" -- v2 adds preview-queue snapshots
+    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x33]); // "ZSR3" -- v3 records the queue as it was at save time (once)
     const out = new Uint8Array(magic.length + payload.length);
     out.set(magic, 0);
     out.set(payload, magic.length);
@@ -902,6 +899,7 @@
 
   function saveReplayFile(){
     if(!replayLog) return;
+    replayLog.finalQueue = snapshotQueue();
     const bytes = encodeReplay(replayLog);
     const blob = new Blob([bytes], {type: 'application/octet-stream'});
     const url = URL.createObjectURL(blob);
@@ -1296,7 +1294,6 @@
     // record the accepted initial deal for the replay log
     replayLog.mode = mode;
     replayLog.initialSpawns = tiles.map(t => ({ pos: posIndex(t.r, t.c), value: t.value }));
-    replayLog.initialQueue = snapshotQueue();
 
     renderScores();
     renderPreview();
@@ -1453,8 +1450,7 @@
     const spawned = spawnRandomTile();
     replayLog.moves.push({
       dir: dir,
-      spawn: { pos: posIndex(spawned.r, spawned.c), value: spawned.value },
-      queue: snapshotQueue()
+      spawn: { pos: posIndex(spawned.r, spawned.c), value: spawned.value }
     });
 
     if(!hasAnyValidMove()){

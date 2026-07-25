@@ -385,8 +385,14 @@
       throw new Error('Not a valid .zsr file (bad magic header)');
     }
     const version = bytes[3];
-    const hasQueue = version === 0x32; // "ZSR2" -- adds preview-queue snapshots
-    if(version !== 0x31 && version !== 0x32){
+    // v2 ("ZSR2") recorded a full preview-queue snapshot before every move.
+    // v3 ("ZSR3") only records one queue snapshot, taken at save time (which
+    // may be mid-game or at game over), so the replay can show the "Next"
+    // tiles as they stood at that moment.
+    const hasQueue = version === 0x32 || version === 0x33;
+    const hasPerMoveQueue = version === 0x32;
+    const hasFinalQueue = version === 0x33;
+    if(version !== 0x31 && version !== 0x32 && version !== 0x33){
       throw new Error('Not a valid .zsr file (bad magic header)');
     }
     const br = new BitReader(bytes.subarray(4));
@@ -398,7 +404,7 @@
       initialSpawns.push({pos, value});
     }
     let initialQueue = [];
-    if(hasQueue){
+    if(hasPerMoveQueue){
       for(let i=0;i<QUEUE_PREVIEW_LEN;i++) initialQueue.push(readQueueEntry(br));
     }
     const moveCount = br.readBits(24);
@@ -408,12 +414,16 @@
       const pos = br.readBits(4);
       const value = readSignedValue(br);
       let queue = [];
-      if(hasQueue){
+      if(hasPerMoveQueue){
         for(let j=0;j<QUEUE_PREVIEW_LEN;j++) queue.push(readQueueEntry(br));
       }
       moves.push({dir, spawn: {pos, value}, queue});
     }
-    return { mode, initialSpawns, initialQueue, moves, hasQueue };
+    let finalQueue = [];
+    if(hasFinalQueue){
+      for(let i=0;i<QUEUE_PREVIEW_LEN;i++) finalQueue.push(readQueueEntry(br));
+    }
+    return { mode, initialSpawns, initialQueue, moves, finalQueue, hasQueue, hasFinalQueue };
   }
 
   // ================= Game-rule simulation (pure, no DOM) =================
@@ -526,6 +536,14 @@
         c: move.spawn.pos % SIZE
       });
       states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: move.queue || [] });
+    }
+
+    // v3 replays only carry a single queue snapshot, taken at save time --
+    // attach it to the last recorded state so it shows up automatically once
+    // the replay reaches the end (the point at which it was saved), instead
+    // of on every step.
+    if(replay.hasFinalQueue && states.length){
+      states[states.length - 1].queue = replay.finalQueue || [];
     }
     return states;
   }
