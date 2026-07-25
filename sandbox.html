@@ -336,6 +336,12 @@
   .sub-note{
     font-size: 1.3vmin; color: var(--muted); line-height:1.5; margin: 0.4vmin 0 1.2vmin;
   }
+  textarea.io-box{
+    width:100%; background: var(--panel2); color:#f2f2f2; border:1px solid var(--border);
+    border-radius: 0.8vmin; padding: 0.8vmin; font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
+    font-size: 1.3vmin; resize: vertical; word-break: break-all;
+  }
+  .io-status{ font-size: 1.3vmin; margin: 0.6vmin 0 0; min-height: 1.6vmin; }
 
   @media (prefers-reduced-motion: reduce){
     .tile, .overlay, .score-value{ transition: none !important; animation: none !important; }
@@ -451,6 +457,23 @@
           <div class="field"><label for="cfg_aiDepth">Search depth</label><input type="number" id="cfg_aiDepth" min="1" max="3" step="1"></div>
           <div class="field"><label for="cfg_aiSpeed">Move delay (ms)</label><input type="number" id="cfg_aiSpeed" min="50" max="3000" step="50"></div>
           <p class="sub-note">The AI runs a depth-limited expectimax search: it maximizes its own move, averages over sampled random spawns (weighted toward small combinable values and a representative large value), and scores boards by empty space, total merge potential, and total remaining magnitude. Use <b>AI Step</b> to make one AI move at a time without auto-play.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Import / Export</legend>
+          <p class="sub-note">Export encodes every setting above into a short string (letters and digits only) and copies it to your clipboard.</p>
+          <div class="field" style="align-items:flex-start;">
+            <button class="restart-btn" id="exportBtn" style="width:100%; justify-content:center;">Export Settings</button>
+          </div>
+          <p class="sub-note" id="exportFallbackNote" style="display:none;">Couldn't access the clipboard — copy the text below manually:</p>
+          <textarea class="io-box" id="exportOutput" readonly rows="3" style="display:none;"></textarea>
+
+          <p class="sub-note" style="margin-top:1.8vmin;">Paste an exported settings string below, then Import.</p>
+          <textarea class="io-box" id="importInput" rows="3" placeholder="Paste settings string here"></textarea>
+          <div class="field">
+            <button class="restart-btn accent" id="importBtn" style="width:100%; justify-content:center;">Import</button>
+          </div>
+          <p class="io-status" id="importStatus"></p>
         </fieldset>
 
       </div>
@@ -1304,6 +1327,148 @@
   refreshInputsFromConfig();
   bindInputs();
 
+  // ================= IMPORT / EXPORT =================
+  // Serializes CONFIG into a fixed-order, comma-delimited string, then
+  // encodes that string as a base62 number so the exported text only
+  // ever contains a-z, A-Z, 0-9.
+  const B62_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const B62_MAP = (() => {
+    const m = {};
+    for(let i=0;i<B62_ALPHABET.length;i++) m[B62_ALPHABET[i]] = i;
+    return m;
+  })();
+
+  function base62EncodeString(str){
+    const bytes = new TextEncoder().encode(str);
+    let num = 0n;
+    for(const b of bytes) num = (num << 8n) | BigInt(b);
+    if(num === 0n) return B62_ALPHABET[0];
+    let out = '';
+    while(num > 0n){
+      out = B62_ALPHABET[Number(num % 62n)] + out;
+      num /= 62n;
+    }
+    return out;
+  }
+
+  function base62DecodeString(s){
+    let num = 0n;
+    for(const ch of s){
+      if(!(ch in B62_MAP)) throw new Error('Invalid character in settings string.');
+      num = num * 62n + BigInt(B62_MAP[ch]);
+    }
+    const bytes = [];
+    while(num > 0n){
+      bytes.unshift(Number(num % 256n));
+      num /= 256n;
+    }
+    return new TextDecoder().decode(new Uint8Array(bytes));
+  }
+
+  function serializeConfig(cfg){
+    return ALL_KEYS.map(key => {
+      const v = cfg[key];
+      if(BOOL_KEYS.includes(key)) return v ? '1' : '0';
+      if(SELECT_KEYS.includes(key)) return v === 'random' ? '1' : '0';
+      if(PERCENT_KEYS.includes(key)) return String(Math.round(v * 1000000));
+      return String(v);
+    }).join(',');
+  }
+
+  function deserializeConfig(str){
+    const parts = str.split(',');
+    if(parts.length !== ALL_KEYS.length) throw new Error('Settings string does not match expected format.');
+    const cfg = {};
+    ALL_KEYS.forEach((key, i) => {
+      const p = parts[i];
+      if(BOOL_KEYS.includes(key)){
+        cfg[key] = p === '1';
+      } else if(SELECT_KEYS.includes(key)){
+        cfg[key] = p === '1' ? 'random' : 'bag';
+      } else if(PERCENT_KEYS.includes(key)){
+        const n = parseInt(p, 10);
+        if(isNaN(n)) throw new Error('Bad value for ' + key);
+        cfg[key] = n / 1000000;
+      } else {
+        const n = parseFloat(p);
+        if(isNaN(n)) throw new Error('Bad value for ' + key);
+        cfg[key] = n;
+      }
+    });
+    return cfg;
+  }
+
+  function exportSettingsString(){
+    return base62EncodeString(serializeConfig(CONFIG));
+  }
+
+  const exportBtn = document.getElementById('exportBtn');
+  const exportFallbackNote = document.getElementById('exportFallbackNote');
+  const exportOutput = document.getElementById('exportOutput');
+  const importInput = document.getElementById('importInput');
+  const importBtn = document.getElementById('importBtn');
+  const importStatus = document.getElementById('importStatus');
+
+  exportBtn.addEventListener('click', async () => {
+    const str = exportSettingsString();
+    exportOutput.value = str;
+    const showFallback = () => {
+      exportFallbackNote.style.display = 'block';
+      exportOutput.style.display = 'block';
+      exportOutput.focus();
+      exportOutput.select();
+    };
+    let copied = false;
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(str);
+        copied = true;
+      }
+    }catch(e){ copied = false; }
+
+    if(!copied){
+      // fallback: try legacy execCommand copy on the visible textarea
+      showFallback();
+      try{
+        const ok = document.execCommand('copy');
+        copied = !!ok;
+      }catch(e){ copied = false; }
+    }
+
+    if(copied){
+      exportFallbackNote.style.display = 'none';
+      exportOutput.style.display = 'none';
+      const original = exportBtn.textContent;
+      exportBtn.textContent = 'Copied to clipboard!';
+      setTimeout(() => { exportBtn.textContent = original; }, 1600);
+    } else {
+      showFallback();
+    }
+  });
+
+  importBtn.addEventListener('click', () => {
+    const cleaned = importInput.value.replace(/[^a-zA-Z0-9]/g, '');
+    if(!cleaned){
+      importStatus.textContent = 'Paste a settings string first.';
+      importStatus.style.color = '#e06060';
+      return;
+    }
+    try{
+      const decoded = base62DecodeString(cleaned);
+      const cfg = deserializeConfig(decoded);
+      CONFIG = Object.assign({}, CONFIG_DEFAULTS, cfg);
+      refreshInputsFromConfig();
+      persistConfig();
+      renderConfigSummary();
+      renderPreview();
+      importStatus.textContent = 'Settings imported. Start a New Game to apply board size changes.';
+      importStatus.style.color = 'var(--accent)';
+    }catch(e){
+      importStatus.textContent = 'Invalid settings string — could not import.';
+      importStatus.style.color = '#e06060';
+    }
+  });
+
   window.addEventListener('beforeunload', persistConfig);
 
   // ---------------- debug hook ----------------
@@ -1312,7 +1477,11 @@
     setScore(v){ score = v; if(score>best) best=score; renderScores(); renderPreview(); renderConfigSummary(); },
     getMaxValue(){ return currentMaxValue(); },
     getDeck(){ return deck; },
-    chooseAIMove
+    chooseAIMove,
+    exportSettingsString,
+    deserializeConfig,
+    base62EncodeString,
+    base62DecodeString
   };
 
   newGame();
