@@ -69,6 +69,19 @@
     -webkit-text-stroke: 0.12vmin #3a3a3a;
   }
   .scores{ display:flex; gap: 1.4vmin; }
+  .score-panel{
+    display:flex;
+    flex-direction:column;
+    gap: 1.4vmin;
+    flex-shrink: 0;
+    padding-top: 0.2vmin;
+  }
+  .score-value.tier-best{ color:#7fdc9c; }
+  .score-value.tier-good{ color:#a3d97f; }
+  .score-value.tier-okay{ color:#e8d27a; }
+  .score-value.tier-weird{ color:#e8a75c; }
+  .score-value.tier-bad{ color:#e8825c; }
+  .score-value.tier-blunder{ color:#ec6a52; }
   .score-box{
     background: var(--panel);
     border-radius: 1.2vmin;
@@ -505,12 +518,6 @@
   <div class="app">
     <div class="header">
       <div class="title" id="titleEl"><span class="zero">Zero</span><span class="sum">Sum</span> <span style="font-size:2.4vmin; color:var(--muted); font-weight:600;">replay</span></div>
-      <div class="scores">
-        <div class="score-box">
-          <div class="score-label">Score</div>
-          <div class="score-value" id="score">0</div>
-        </div>
-      </div>
     </div>
 
     <div class="drop-zone" id="dropZone">
@@ -522,6 +529,16 @@
      <div class="layout">
       <div class="main-col">
       <div class="board-row">
+        <div class="score-panel" id="scorePanelWrap">
+          <div class="score-box">
+            <div class="score-label">Score</div>
+            <div class="score-value" id="score">0</div>
+          </div>
+          <div class="score-box">
+            <div class="score-label">Accuracy</div>
+            <div class="score-value" id="accuracyLabel">&mdash;</div>
+          </div>
+        </div>
         <div class="board-wrap">
           <div class="board" id="board"></div>
         </div>
@@ -1013,6 +1030,7 @@
   // ================= Rendering =================
   const boardEl = document.getElementById('board');
   const scoreEl = document.getElementById('score');
+  const accuracyLabelEl = document.getElementById('accuracyLabel');
   const titleEl = document.getElementById('titleEl');
   const previewPanelEl = document.getElementById('previewPanel');
   const previewPanelWrapEl = document.getElementById('previewPanelWrap');
@@ -1142,6 +1160,7 @@
 
     drawChart();
     updateAiPanel();
+    updateAccuracyLabel();
   }
 
   // ================= Score chart =================
@@ -1338,6 +1357,43 @@
     return ACCURACY_TIERS[ACCURACY_TIERS.length-1];
   }
 
+  // Shows the accuracy tier (Best/Good/.../Blunder) for the move that led
+  // into the current state, using whatever analysis is already cached --
+  // either from a full-game analysis pass, or from having stepped through
+  // this position before with "Analyze current step" on. Doesn't trigger
+  // a new computation, so it stays instant.
+  function updateAccuracyLabel(){
+    accuracyLabelEl.classList.remove('tier-best','tier-good','tier-okay','tier-weird','tier-bad','tier-blunder');
+    const movingIndex = curIndex - 1;
+    if(movingIndex < 0 || !states.length){
+      accuracyLabelEl.textContent = '\u2014';
+      return;
+    }
+    const actualDir = states[curIndex].dir;
+    let tierKey = null;
+    if(fullAnalysis && fullAnalysis[movingIndex] && fullAnalysis[movingIndex].tierKey){
+      tierKey = fullAnalysis[movingIndex].tierKey;
+    } else {
+      const depth = parseInt(aiDepthEl.value, 10);
+      const cached = aiStepCache.get(movingIndex + ':' + depth);
+      if(cached && cached.best){
+        const actualEntry = cached.results.find(r => r.dir === actualDir);
+        const matched = !!(actualEntry && actualEntry.isBest);
+        if(actualEntry && actualEntry.moved){
+          const delta = cached.best.value - actualEntry.value;
+          tierKey = classifyAccuracy(delta, matched).key;
+        }
+      }
+    }
+    if(tierKey){
+      const tier = ACCURACY_TIERS.find(t => t.key === tierKey);
+      accuracyLabelEl.textContent = tier ? tier.label : '\u2014';
+      accuracyLabelEl.classList.add('tier-' + tierKey);
+    } else {
+      accuracyLabelEl.textContent = '\u2014';
+    }
+  }
+
   // Mirrors the .acc-row.tier-*  .acc-label colors in the stylesheet, so the
   // score-chart divergence dots match the tier labels exactly.
   const TIER_DOT_COLORS = {
@@ -1475,6 +1531,7 @@
       aiVerdictEl.textContent = (matched
         ? ('Move played (' + actualDir + ') matches the AI\u2019s top pick.')
         : ('AI would have played ' + evalOut.best.dir + ' instead of ' + actualDir + '.')) + accText + tierText;
+      updateAccuracyLabel();
     }
 
     if(aiStepCache.has(cacheKey)){
@@ -1572,6 +1629,7 @@
         fullAnalysis = null;
       }
       drawChart();
+      updateAccuracyLabel();
       if(pendingJumpTier){
         const tk = pendingJumpTier;
         pendingJumpTier = null;
