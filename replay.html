@@ -290,7 +290,215 @@
     text-align:center;
     letter-spacing: 0.04em;
   }
-  .hidden{ display:none !important; }
+  .layout{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.6vmin;
+  }
+  .main-col{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 1.6vmin;
+    width:100%;
+  }
+  .side-col{
+    display:flex;
+    flex-direction:column;
+    gap: 1.6vmin;
+    width:100%;
+  }
+
+  /* Wide (desktop) screens: panels move to the right of the board instead
+     of stacking below it. */
+  @media (min-width: 860px){
+    .app{ width: min(92vw, 980px); }
+    .layout{
+      flex-direction:row;
+      align-items:flex-start;
+      justify-content:center;
+      gap: 3vmin;
+    }
+    .main-col{ width: auto; flex: 0 0 auto; }
+    .side-col{ width: 34vmin; min-width: 300px; flex: 1 1 340px; padding-top: 0.2vmin; }
+  }
+
+  /* ---------- Score graph ---------- */
+  .panel{
+    width:100%;
+    background: var(--panel);
+    border-radius: 1.6vmin;
+    padding: 1.6vmin 1.8vmin;
+    display:flex;
+    flex-direction:column;
+    gap: 0.8vmin;
+  }
+  .panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .panel-title{
+    font-size: 1.5vmin;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .panel-sub{
+    font-size: 1.4vmin;
+    color: var(--muted);
+  }
+  #scoreChart{
+    width:100%;
+    height: 16vmin;
+    display:block;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .chart-stats{
+    display:flex;
+    gap: 2vmin;
+    flex-wrap: wrap;
+    font-size: 1.4vmin;
+    color: var(--muted);
+  }
+  .chart-stats b{ color:#eee; font-variant-numeric: tabular-nums; }
+
+  /* ---------- AI panel ---------- */
+  .ai-toggle-row{
+    display:flex;
+    align-items:center;
+    gap: 1vmin;
+    font-size: 1.6vmin;
+    color: #d8d8d8;
+    flex-wrap: wrap;
+  }
+  .ai-toggle-row label{ display:flex; align-items:center; gap:0.7vmin; cursor:pointer; }
+  .ai-toggle-row select{
+    background: var(--cell);
+    color:#eee;
+    border:none;
+    border-radius: 0.8vmin;
+    padding: 0.6vmin 1vmin;
+    font-family: inherit;
+    font-size: 1.5vmin;
+  }
+  .ai-status{
+    font-size: 1.4vmin;
+    color: var(--accent);
+    min-height: 2vmin;
+  }
+  .ai-dirs{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1vmin;
+  }
+  .ai-dir{
+    background: var(--cell);
+    border-radius: 1vmin;
+    padding: 0.9vmin 0.6vmin;
+    text-align:center;
+    position:relative;
+    overflow:hidden;
+  }
+  .ai-dir.best{ box-shadow: 0 0 0 0.22vmin var(--accent) inset; }
+  .ai-dir.actual::after{
+    content:'played';
+    position:absolute;
+    top:0.3vmin; right:0.5vmin;
+    font-size:1vmin;
+    color: var(--accent);
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+  }
+  .ai-dir .arrow{ font-size:2.4vmin; font-weight:800; color:#eee; }
+  .ai-dir .val{
+    font-family: "SF Mono","JetBrains Mono","Consolas",monospace;
+    font-size: 1.3vmin;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ai-dir.invalid{ opacity:0.35; }
+  .ai-verdict{
+    font-size: 1.5vmin;
+    text-align:center;
+    padding: 0.6vmin;
+    border-radius: 1vmin;
+  }
+  .ai-verdict.match{ background: rgba(90,200,120,0.12); color:#7fdc9c; }
+  .ai-verdict.mismatch{ background: rgba(230,120,90,0.12); color:#ec9a7a; }
+  .ai-note{
+    font-size: 1.25vmin;
+    color: var(--muted);
+    line-height:1.5;
+  }
+  .progress-row{
+    display:flex;
+    align-items:center;
+    gap:1vmin;
+  }
+  .progress-track{
+    flex:1;
+    height: 0.9vmin;
+    background: var(--cell);
+    border-radius: 1vmin;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background: var(--accent);
+    width:0%;
+    transition: width 0.1s linear;
+  }
+
+  /* ---------- Accuracy breakdown table ---------- */
+  .acc-headline{
+    font-family: "SF Mono","JetBrains Mono","Consolas",monospace;
+    font-size: 3.2vmin;
+    font-weight: 800;
+    color: #f2f2f2;
+    text-align:center;
+  }
+  .acc-table{ display:flex; flex-direction:column; gap: 0.5vmin; }
+  .acc-row{
+    display:grid;
+    grid-template-columns: 8vmin 1fr 6vmin;
+    align-items:center;
+    gap: 1vmin;
+    font-size: 1.5vmin;
+    border-radius: 0.8vmin;
+    transition: background 0.12s ease;
+  }
+  .acc-row:hover{ background: rgba(255,255,255,0.05); }
+  .acc-row .acc-label{ font-weight:700; }
+  .acc-row .acc-count{
+    font-family: "SF Mono","JetBrains Mono","Consolas",monospace;
+    text-align:right;
+    color:#ddd;
+    font-variant-numeric: tabular-nums;
+  }
+  .acc-bar-track{
+    height: 1.4vmin;
+    border-radius: 0.8vmin;
+    background: var(--cell);
+    overflow:hidden;
+  }
+  .acc-bar-fill{ height:100%; width:0%; border-radius: 0.8vmin; }
+  .acc-row.tier-best .acc-label{ color:#7fdc9c; }
+  .acc-row.tier-best .acc-bar-fill{ background:#4fae74; }
+  .acc-row.tier-good .acc-label{ color:#a3d97f; }
+  .acc-row.tier-good .acc-bar-fill{ background:#7fbf52; }
+  .acc-row.tier-okay .acc-label{ color:#e8d27a; }
+  .acc-row.tier-okay .acc-bar-fill{ background:#cbb247; }
+  .acc-row.tier-weird .acc-label{ color:#e8a75c; }
+  .acc-row.tier-weird .acc-bar-fill{ background:#c9853a; }
+  .acc-row.tier-bad .acc-label{ color:#e8825c; }
+  .acc-row.tier-bad .acc-bar-fill{ background:#c85f3a; }
+  .acc-row.tier-blunder .acc-label{ color:#ec6a52; }
+  .acc-row.tier-blunder .acc-bar-fill{ background:#c73f28; }
 </style>
 </head>
 <body>
@@ -310,7 +518,9 @@
       <input type="file" id="fileInput" accept=".zsr">
     </div>
 
-    <div id="viewerArea" class="hidden" style="width:100%; display:flex; flex-direction:column; align-items:center; gap:1.6vmin;">
+    <div id="viewerArea" class="hidden" style="width:100%;">
+     <div class="layout">
+      <div class="main-col">
       <div class="board-row">
         <div class="board-wrap">
           <div class="board" id="board"></div>
@@ -339,6 +549,66 @@
         </div>
       </div>
       <div class="footer-hint">Drag the slider, use &larr;/&rarr; keys, or <b>scroll</b> over the board to step through the replay.</div>
+      </div>
+
+      <div class="side-col">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Score progression</div>
+          <div style="display:flex; align-items:center; gap:1.4vmin;">
+            <label style="display:flex; align-items:center; gap:0.6vmin; font-size:1.3vmin; color:var(--muted); cursor:pointer; user-select:none;">
+              <input type="checkbox" id="chartMarkersToggle" checked style="width:1.3vmin; height:1.3vmin; cursor:pointer;">
+              Markers
+            </label>
+            <div class="panel-sub" id="chartHoverLabel">step <span id="chartHoverStep">0</span> &middot; score <span id="chartHoverScore">0</span></div>
+          </div>
+        </div>
+        <canvas id="scoreChart" width="600" height="160"></canvas>
+        <div class="chart-stats">
+          <span>Final score <b id="statFinalScore">0</b></span>
+          <span>Moves <b id="statMoves">0</b></span>
+          <span>Best single gain <b id="statBestGain">0</b></span>
+          <span>Avg gain/move <b id="statAvgGain">0</b></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Expectimax AI feedback</div>
+        </div>
+        <div class="ai-toggle-row">
+          <label><input type="checkbox" id="aiEnable"> Analyze current step</label>
+          <span>depth</span>
+          <select id="aiDepth">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5" selected>5 (full queue)</option>
+          </select>
+          <button class="btn" id="aiRunAllBtn" style="padding:0.8vmin 1.6vmin; font-size:1.4vmin;">Analyze full game</button>
+        </div>
+        <div class="ai-status" id="aiStatus"></div>
+        <div class="progress-row hidden" id="aiProgressRow">
+          <div class="progress-track"><div class="progress-fill" id="aiProgressFill"></div></div>
+          <span class="panel-sub" id="aiProgressLabel">0%</span>
+          <button class="btn" id="aiCancelBtn" style="padding:0.6vmin 1.4vmin; font-size:1.3vmin;">Cancel</button>
+        </div>
+        <div class="ai-dirs hidden" id="aiDirs"></div>
+        <div class="ai-verdict hidden" id="aiVerdict"></div>
+        <div class="chart-stats hidden" id="aiFullStats">
+          <span>Game accuracy <b id="aiAccuracy">-</b></span>
+          <span>Moves matching AI <b id="aiMatchPct">-</b></span>
+          <span>Avg step score vs AI-best <b id="aiAvgDelta">-</b></span>
+        </div>
+        <div class="hidden" id="aiAccuracyBreakdown">
+          <div class="acc-headline" id="aiAccHeadline">-</div>
+          <div class="acc-table" id="aiAccTable"></div>
+        </div>
+      </div>
+      </div>
+
+     </div>
     </div>
   </div>
 
@@ -511,6 +781,174 @@
     return { tiles: survivors, scoreGain };
   }
 
+  // ================= Expectimax AI (ported from zerosum_ai.c) =================
+  // Faithful port of simulate_move_values / board_heuristic / expectimax_max /
+  // expectimax_chance / the root direction search in pick_best_move. Operates
+  // on a flat 16-value Int32Array board (0 = empty) instead of tile objects,
+  // matching the C code's `int values[BOARD_N]` representation exactly.
+  const AI_CHANCE_SAMPLE_CAP = 6;
+
+  // Two direction values are considered a "tie" (equally good, e.g. equally
+  // inevitable-death lines that also score the same) when they're within
+  // this tolerance of each other. Needed because the expectimax values are
+  // floating-point averages, so a true tie can come out as e.g.
+  // 123.40000000000001 vs 123.4.
+  const TIE_EPSILON = 1e-6;
+
+  function valuesFromTiles(tiles){
+    const arr = new Array(SIZE*SIZE).fill(0);
+    tiles.forEach(t => { arr[t.r*SIZE + t.c] = t.value; });
+    return arr;
+  }
+
+  function evaluateMergeValues(a, b, maxVal, combineOn){
+    if(a + b === 0) return { type:'cancel', gain: Math.abs(a) * 10, val: 0 };
+    if(!combineOn) return null;
+    if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+      const sum = a + b;
+      if(sum !== 0 && Math.abs(sum) <= maxVal){
+        return { type:'combine', gain: Math.min(Math.abs(a), Math.abs(b)), val: sum };
+      }
+    }
+    return null;
+  }
+
+  // Single left-to-right pass per line, matching simulate_move_values() in
+  // zerosum_ai.c (does not re-visit a slot after a gap closes).
+  function simulateMoveValues(values, dir, maxVal, combineOn){
+    const lines = getLineCoords(dir);
+    const out = values.slice();
+    let moved = false, scoreGain = 0;
+    for(const line of lines){
+      const idxs = line.map(p => p.r*SIZE + p.c);
+      const arr = idxs.map(ix => out[ix]);
+      const mergedInto = [false,false,false,false];
+      for(let i=0;i<3;i++){
+        if(arr[i+1] === 0) continue;
+        if(arr[i] === 0){
+          arr[i] = arr[i+1]; arr[i+1] = 0; moved = true;
+        } else if(!mergedInto[i]){
+          const res = evaluateMergeValues(arr[i], arr[i+1], maxVal, combineOn);
+          if(res){
+            scoreGain += res.gain;
+            if(res.type === 'cancel'){ arr[i] = 0; arr[i+1] = 0; }
+            else { arr[i] = res.val; arr[i+1] = 0; }
+            mergedInto[i] = true; moved = true;
+          }
+        }
+      }
+      for(let i=0;i<4;i++) out[idxs[i]] = arr[i];
+    }
+    let allEmpty = true;
+    for(let i=0;i<out.length;i++) if(out[i] !== 0){ allEmpty = false; break; }
+    if(allEmpty) scoreGain += ZERO_CLEAR_BONUS;
+    return { out, moved, gain: scoreGain };
+  }
+
+  function boardHeuristic(values, combineOn){
+    let emptyCount = 0, cancelPotential = 0, combinePotential = 0, sumAbs = 0;
+    for(let i=0;i<values.length;i++){
+      const v = values[i];
+      if(v === 0){ emptyCount++; continue; }
+      sumAbs += Math.abs(v);
+    }
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const v = values[r*SIZE+c];
+        if(v === 0) continue;
+        if(c < SIZE-1){
+          const w = values[r*SIZE+c+1];
+          if(w !== 0){
+            if(v+w === 0) cancelPotential++;
+            else if(combineOn && (Math.abs(v) <= 3 || Math.abs(w) <= 3)) combinePotential++;
+          }
+        }
+        if(r < SIZE-1){
+          const w = values[(r+1)*SIZE+c];
+          if(w !== 0){
+            if(v+w === 0) cancelPotential++;
+            else if(combineOn && (Math.abs(v) <= 3 || Math.abs(w) <= 3)) combinePotential++;
+          }
+        }
+      }
+    }
+    return emptyCount*8.0 + cancelPotential*25.0 + combinePotential*6.0 - sumAbs*0.1;
+  }
+
+  // NOTE: unlike zerosum_ai.c (which only knows the single next tile and
+  // reuses it as a stand-in at every ply of the search), the replay knows
+  // the true sequence of upcoming tiles for however many moves are left in
+  // the recording. We use that real sequence instead of repeating one
+  // value, and the search simply can't go deeper than there are known
+  // tiles -- so effective depth is capped at ctx.queue.length (5, matching
+  // the "Next" preview length everywhere else in the app).
+  function expectimaxMax(values, depth, ctx, ply){
+    if(depth <= 0) return boardHeuristic(values, ctx.combineOn);
+    let best = -Infinity, any = false;
+    for(const dir of DIR_NAMES){
+      const { out, moved, gain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
+      if(!moved) continue;
+      any = true;
+      const val = gain + expectimaxChance(out, depth, ctx, ply);
+      if(val > best) best = val;
+    }
+    if(!any) return boardHeuristic(values, ctx.combineOn) - 1000.0;
+    return best;
+  }
+
+  function expectimaxChance(values, depth, ctx, ply){
+    // Ran out of known future tiles -- can't simulate the next spawn, so
+    // stop the search here and just score the position as-is.
+    if(ply >= ctx.queue.length) return boardHeuristic(values, ctx.combineOn);
+    const tileValue = ctx.queue[ply];
+
+    const empties = [];
+    for(let i=0;i<values.length;i++) if(values[i] === 0) empties.push(i);
+    if(empties.length === 0) return expectimaxMax(values, depth-1, ctx, ply+1);
+    let sample;
+    if(empties.length > AI_CHANCE_SAMPLE_CAP){
+      sample = [];
+      const step = empties.length / AI_CHANCE_SAMPLE_CAP;
+      for(let k=0;k<AI_CHANCE_SAMPLE_CAP;k++) sample.push(empties[Math.floor(k*step)]);
+    } else {
+      sample = empties;
+    }
+    let total = 0;
+    for(const idx of sample){
+      const board2 = values.slice();
+      board2[idx] = tileValue;
+      total += expectimaxMax(board2, depth-1, ctx, ply+1);
+    }
+    return total / sample.length;
+  }
+
+  // Root direction search, matching dir_worker()/pick_best_move() in
+  // zerosum_ai.c for a single fixed target depth (no iterative deepening --
+  // that's purely a time-budget mechanism in the C version and doesn't
+  // change the final answer for a given depth), except using the real
+  // known tile sequence (see note above) and capping depth at its length.
+  function evaluateDirections(values, maxVal, combineOn, queue, depth){
+    const cappedDepth = Math.min(depth, queue.length);
+    const ctx = { maxVal, combineOn, queue };
+    const results = [];
+    for(const dir of DIR_NAMES){
+      const { out, moved, gain } = simulateMoveValues(values, dir, maxVal, combineOn);
+      if(!moved){ results.push({ dir, moved:false, value:null }); continue; }
+      const value = gain + expectimaxChance(out, cappedDepth-1, ctx, 0);
+      results.push({ dir, moved:true, value, gain });
+    }
+    let best = null;
+    for(const r of results) if(r.moved && (best === null || r.value > best.value)) best = r;
+    // Mark every move whose value ties the best (within TIE_EPSILON) --
+    // e.g. moves that all lead to the same inevitable death and the same
+    // score are equally "best", not just whichever happened to be found
+    // first.
+    if(best){
+      for(const r of results) r.isBest = r.moved && Math.abs(r.value - best.value) < TIE_EPSILON;
+    }
+    return { results, best };
+  }
+
   // ================= Build full state timeline from a parsed replay =================
   // For v3 replays we no longer have a per-move queue snapshot -- instead we
   // reconstruct the "Next" preview at every step from the tiles that go on
@@ -597,6 +1035,44 @@
   let playing = false;
   let playTimer = null;
   let hasQueue = false;
+  let replayRef = null;
+  let showTierMarkers = true;
+
+  // ---- Score chart ----
+  const scoreChartEl = document.getElementById('scoreChart');
+  const chartMarkersToggleEl = document.getElementById('chartMarkersToggle');
+  const chartHoverStepEl = document.getElementById('chartHoverStep');
+  const chartHoverScoreEl = document.getElementById('chartHoverScore');
+  const statFinalScoreEl = document.getElementById('statFinalScore');
+  const statMovesEl = document.getElementById('statMoves');
+  const statBestGainEl = document.getElementById('statBestGain');
+  const statAvgGainEl = document.getElementById('statAvgGain');
+
+  // ---- AI panel ----
+  const aiEnableEl = document.getElementById('aiEnable');
+  const aiDepthEl = document.getElementById('aiDepth');
+  const aiStatusEl = document.getElementById('aiStatus');
+  const aiDirsEl = document.getElementById('aiDirs');
+  const aiVerdictEl = document.getElementById('aiVerdict');
+  const aiRunAllBtn = document.getElementById('aiRunAllBtn');
+  const aiCancelBtn = document.getElementById('aiCancelBtn');
+  const aiProgressRow = document.getElementById('aiProgressRow');
+  const aiProgressFill = document.getElementById('aiProgressFill');
+  const aiProgressLabel = document.getElementById('aiProgressLabel');
+  const aiFullStats = document.getElementById('aiFullStats');
+  const aiMatchPctEl = document.getElementById('aiMatchPct');
+  const aiAvgDeltaEl = document.getElementById('aiAvgDelta');
+  const aiAccuracyEl = document.getElementById('aiAccuracy');
+  const aiAccuracyBreakdown = document.getElementById('aiAccuracyBreakdown');
+  const aiAccHeadline = document.getElementById('aiAccHeadline');
+  const aiAccTable = document.getElementById('aiAccTable');
+
+  const DIR_ARROW_BIG = { left:'\u2190', right:'\u2192', up:'\u2191', down:'\u2193' };
+  const aiStepCache = new Map(); // `${index}:${depth}` -> {results,best}
+  let fullAnalysis = null;       // array parallel to states (index 0..len-2), or null
+  let fullAnalysisCancelled = false;
+  let fullAnalysisRunning = false;
+  let pendingJumpTier = null; // tier key to jump to once a triggered full analysis finishes
 
   function applyModeVisuals(){
     if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
@@ -663,7 +1139,453 @@
     stepBackBtn.disabled = curIndex === 0;
     stepFwdBtn.disabled = curIndex === states.length-1;
     if(curIndex === states.length-1) stopPlaying();
+
+    drawChart();
+    updateAiPanel();
   }
+
+  // ================= Score chart =================
+  function chartMetrics(){
+    const rect = scoreChartEl.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height || 160));
+    if(scoreChartEl.width !== w*dpr || scoreChartEl.height !== h*dpr){
+      scoreChartEl.width = w*dpr;
+      scoreChartEl.height = h*dpr;
+    }
+    return { w, h, dpr };
+  }
+
+  function drawChart(){
+    if(!states.length) return;
+    const { w, h, dpr } = chartMetrics();
+    const ctx = scoreChartEl.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,w,h);
+
+    const pad = { l: 8, r: 8, t: 8, b: 8 };
+    const scores = states.map(s => s.score);
+    const minS = Math.min(0, ...scores);
+    const maxS = Math.max(1, ...scores);
+    const xFor = i => pad.l + (w - pad.l - pad.r) * (states.length<=1 ? 0 : i/(states.length-1));
+    const yFor = v => pad.t + (h - pad.t - pad.b) * (1 - (v - minS)/(maxS - minS || 1));
+
+    // gridlines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    for(let g=0; g<=4; g++){
+      const y = pad.t + (h-pad.t-pad.b) * g/4;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w-pad.r, y); ctx.stroke();
+    }
+
+    // score line
+    ctx.strokeStyle = '#e8a33d';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    states.forEach((s,i) => {
+      const x = xFor(i), y = yFor(s.score);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // fill
+    const grad = ctx.createLinearGradient(0,pad.t,0,h-pad.b);
+    grad.addColorStop(0, 'rgba(232,163,61,0.28)');
+    grad.addColorStop(1, 'rgba(232,163,61,0)');
+    ctx.lineTo(xFor(states.length-1), h-pad.b);
+    ctx.lineTo(xFor(0), h-pad.b);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // divergence markers from full analysis, if available -- thin vertical
+    // lines colored to match each move's tier label (see ACCURACY_TIERS /
+    // .acc-row.tier-*), toggleable via the "Markers" checkbox.
+    if(showTierMarkers && fullAnalysis){
+      ctx.lineWidth = 0.75;
+      for(let i=0;i<fullAnalysis.length;i++){
+        const a = fullAnalysis[i];
+        if(a && a.mismatch){
+          const x = xFor(i);
+          ctx.strokeStyle = TIER_DOT_COLORS[a.tierKey] || TIER_DOT_COLORS.blunder;
+          ctx.beginPath();
+          ctx.moveTo(x, pad.t);
+          ctx.lineTo(x, h - pad.b);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // current position marker
+    const cx = xFor(curIndex), cy = yFor(states[curIndex].score);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, pad.t); ctx.lineTo(cx, h-pad.b); ctx.stroke();
+    ctx.fillStyle = '#f5f5f5';
+    ctx.beginPath(); ctx.arc(cx, cy, 3.2, 0, Math.PI*2); ctx.fill();
+  }
+
+  function updateChartStats(){
+    if(!states.length) return;
+    const final = states[states.length-1].score;
+    const moves = states.length - 1;
+    let bestGain = 0, totalGain = 0;
+    for(let i=1;i<states.length;i++){
+      const gain = states[i].score - states[i-1].score;
+      totalGain += gain;
+      if(gain > bestGain) bestGain = gain;
+    }
+    statFinalScoreEl.textContent = final;
+    statMovesEl.textContent = moves;
+    statBestGainEl.textContent = bestGain;
+    statAvgGainEl.textContent = moves ? (totalGain/moves).toFixed(1) : '0';
+  }
+
+  function chartIndexFromEvent(e){
+    const rect = scoreChartEl.getBoundingClientRect();
+    const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+    const frac = (clientX - rect.left - 8) / Math.max(1, rect.width - 16);
+    const idx = Math.round(frac * (states.length-1));
+    return Math.max(0, Math.min(states.length-1, idx));
+  }
+  let chartScrubbing = false;
+  scoreChartEl.addEventListener('mousedown', (e) => {
+    if(!states.length) return;
+    chartScrubbing = true; stopPlaying();
+    renderState(chartIndexFromEvent(e));
+  });
+  window.addEventListener('mousemove', (e) => {
+    if(chartScrubbing) renderState(chartIndexFromEvent(e));
+  });
+  window.addEventListener('mouseup', () => { chartScrubbing = false; });
+  scoreChartEl.addEventListener('mousemove', (e) => {
+    if(!states.length) return;
+    const idx = chartIndexFromEvent(e);
+    chartHoverStepEl.textContent = idx;
+    chartHoverScoreEl.textContent = states[idx].score;
+  });
+  scoreChartEl.addEventListener('touchstart', (e) => {
+    if(!states.length) return;
+    stopPlaying(); renderState(chartIndexFromEvent(e));
+  }, {passive:true});
+  scoreChartEl.addEventListener('touchmove', (e) => {
+    if(!states.length) return;
+    renderState(chartIndexFromEvent(e));
+  }, {passive:true});
+  chartMarkersToggleEl.addEventListener('change', () => {
+    showTierMarkers = chartMarkersToggleEl.checked;
+    drawChart();
+  });
+
+  // ================= AI feedback panel =================
+  function contextForState(index){
+    const st = states[index];
+    const maxVal = currentMaxValue(st.score);
+    const combineOn = mode === 'zerosum';
+    const queue = futureQueueForState(index);
+    return { values: valuesFromTiles(st.tiles), maxVal, combineOn, queue };
+  }
+
+  // The real sequence of tiles that go on to spawn after this state, up to
+  // QUEUE_PREVIEW_LEN (5) moves ahead -- ground truth from the replay, not
+  // a guess. This is what caps how deep the AI search can actually look:
+  // once we run out of known future tiles, there's nothing left to
+  // simulate spawning.
+  function futureQueueForState(index){
+    const out = [];
+    if(!replayRef) return out;
+    for(let k=0; k<QUEUE_PREVIEW_LEN; k++){
+      const mv = replayRef.moves[index + k];
+      if(!mv) break;
+      out.push(mv.spawn.value);
+    }
+    return out;
+  }
+
+  // Move "accuracy": (C-W)/(B-W) where C/B/W are the expectimax eval values
+  // of the Chosen, Best, and Worst among the legal moves available at that
+  // state. 1.0 = played the best move, 0.0 = played the worst. When only
+  // one legal move exists (B===W) that move is trivially optimal -> 1.0.
+  function computeMoveAccuracy(evalOut, actualDir){
+    const valid = evalOut.results.filter(r => r.moved);
+    if(!valid.length) return null;
+    const chosen = valid.find(r => r.dir === actualDir);
+    if(!chosen) return null;
+    let best = -Infinity, worst = Infinity;
+    for(const r of valid){ if(r.value > best) best = r.value; if(r.value < worst) worst = r.value; }
+    const accuracy = (best === worst) ? 1 : (chosen.value - worst) / (best - worst);
+    return { accuracy: Math.max(0, Math.min(1, accuracy)), best, worst, chosen: chosen.value };
+  }
+
+  // Buckets a move into a human-readable tier by the raw expectimax eval
+  // gap between the move played and the AI's best move (bestValue - chosenValue,
+  // in the same units as the eval numbers shown in the direction panel) --
+  // not by the normalized 0-1 accuracy ratio. Playing the literal best move
+  // (or a tied move, see TIE_EPSILON) is always "Best"; everything else is
+  // graded purely by how large that eval gap is.
+  const ACCURACY_TIERS = [
+    { key:'best',    label:'Best',    maxDelta:0 },
+    { key:'good',    label:'Good',    maxDelta:10 },
+    { key:'okay',    label:'Okay',    maxDelta:30 },
+    { key:'weird',   label:'Weird',   maxDelta:75 },
+    { key:'bad',     label:'Bad',     maxDelta:200 },
+    { key:'blunder', label:'Blunder', maxDelta:Infinity },
+  ];
+  function classifyAccuracy(delta, matched){
+    if(matched) return ACCURACY_TIERS[0];
+    for(const tier of ACCURACY_TIERS){ if(delta <= tier.maxDelta) return tier; }
+    return ACCURACY_TIERS[ACCURACY_TIERS.length-1];
+  }
+
+  // Mirrors the .acc-row.tier-*  .acc-label colors in the stylesheet, so the
+  // score-chart divergence dots match the tier labels exactly.
+  const TIER_DOT_COLORS = {
+    best:    '#7fdc9c',
+    good:    '#a3d97f',
+    okay:    '#e8d27a',
+    weird:   '#e8a75c',
+    bad:     '#e8825c',
+    blunder: '#ec6a52',
+  };
+
+  function jumpToTier(tierKey){
+    if(!states.length) return;
+    if(!fullAnalysis){
+      // Not analyzed yet -- run the full-game pass first, then jump once it lands.
+      pendingJumpTier = tierKey;
+      if(!fullAnalysisRunning) runFullAnalysis();
+      return;
+    }
+    const total = fullAnalysis.length;
+    if(!total) return;
+    stopPlaying();
+    for(let offset = 1; offset <= total; offset++){
+      const idx = (curIndex + offset) % total;
+      const entry = fullAnalysis[idx];
+      if(entry && entry.tierKey === tierKey){
+        renderState(idx);
+        return;
+      }
+    }
+    // No move anywhere has this label.
+    aiStatusEl.textContent = 'No "' + (ACCURACY_TIERS.find(t => t.key === tierKey) || {}).label + '" moves in this game.';
+  }
+
+  function renderAccuracyBreakdown(avgAccuracy, tierCounts, totalMoves){
+    aiAccHeadline.textContent = totalMoves ? (avgAccuracy*100).toFixed(2) + '%' : '-';
+    aiAccTable.innerHTML = '';
+    ACCURACY_TIERS.forEach(tier => {
+      const count = tierCounts[tier.key] || 0;
+      const pct = totalMoves ? (100*count/totalMoves) : 0;
+      const row = document.createElement('div');
+      row.className = 'acc-row tier-' + tier.key;
+      row.style.cursor = 'pointer';
+      row.title = 'Jump to the next "' + tier.label + '" move';
+      row.addEventListener('click', () => jumpToTier(tier.key));
+      const label = document.createElement('div');
+      label.className = 'acc-label';
+      label.textContent = tier.label;
+      const track = document.createElement('div');
+      track.className = 'acc-bar-track';
+      const fill = document.createElement('div');
+      fill.className = 'acc-bar-fill';
+      fill.style.width = pct + '%';
+      track.appendChild(fill);
+      const countEl = document.createElement('div');
+      countEl.className = 'acc-count';
+      countEl.textContent = count;
+      row.appendChild(label); row.appendChild(track); row.appendChild(countEl);
+      aiAccTable.appendChild(row);
+    });
+    aiAccuracyBreakdown.classList.remove('hidden');
+  }
+
+  function analyzeState(index, depth){
+    const key = index + ':' + depth;
+    if(aiStepCache.has(key)) return aiStepCache.get(key);
+    const { values, maxVal, combineOn, queue } = contextForState(index);
+    if(!queue.length) return null; // terminal state, nothing to recommend
+    const out = evaluateDirections(values, maxVal, combineOn, queue, depth);
+    aiStepCache.set(key, out);
+    return out;
+  }
+
+  function renderAiDirs(container, evalOut, actualDir){
+    container.innerHTML = '';
+    DIR_NAMES.forEach(dir => {
+      const r = evalOut.results.find(x => x.dir === dir);
+      const el = document.createElement('div');
+      el.className = 'ai-dir';
+      if(!r || !r.moved) el.classList.add('invalid');
+      if(r && r.isBest) el.classList.add('best');
+      if(dir === actualDir) el.classList.add('actual');
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow';
+      arrow.textContent = DIR_ARROW_BIG[dir];
+      const val = document.createElement('div');
+      val.className = 'val';
+      val.textContent = (r && r.moved) ? r.value.toFixed(1) : '\u2014';
+      el.appendChild(arrow); el.appendChild(val);
+      container.appendChild(el);
+    });
+  }
+
+  function updateAiPanel(){
+    if(!aiEnableEl.checked || !states.length){
+      aiDirsEl.classList.add('hidden');
+      aiVerdictEl.classList.add('hidden');
+      aiStatusEl.textContent = '';
+      return;
+    }
+    if(curIndex >= states.length - 1){
+      aiDirsEl.classList.add('hidden');
+      aiVerdictEl.classList.remove('hidden');
+      aiVerdictEl.className = 'ai-verdict';
+      aiVerdictEl.textContent = 'End of replay \u2014 no further move to analyze.';
+      aiStatusEl.textContent = '';
+      return;
+    }
+    if(playing){
+      aiStatusEl.textContent = 'Paused while playing \u2014 stop to analyze this step.';
+      return;
+    }
+    const depth = parseInt(aiDepthEl.value, 10);
+    const idx = curIndex;
+    const cacheKey = idx + ':' + depth;
+
+    function present(evalOut, fromCache){
+      if(!evalOut){ aiStatusEl.textContent = 'No data.'; return; }
+      const actualDir = states[idx+1].dir;
+      aiStatusEl.textContent = fromCache ? 'Already analyzed.' : '';
+      aiDirsEl.classList.remove('hidden');
+      renderAiDirs(aiDirsEl, evalOut, actualDir);
+      aiVerdictEl.classList.remove('hidden');
+      const actualEntry = evalOut.results.find(r => r.dir === actualDir);
+      const matched = !!(actualEntry && actualEntry.isBest);
+      const acc = computeMoveAccuracy(evalOut, actualDir);
+      let tierLabel = '';
+      if(actualEntry && actualEntry.moved){
+        const delta = evalOut.best.value - actualEntry.value;
+        tierLabel = classifyAccuracy(delta, matched).label;
+      }
+      aiVerdictEl.className = 'ai-verdict ' + (matched ? 'match' : 'mismatch');
+      const accText = acc ? (' \u2014 accuracy ' + Math.round(acc.accuracy*100) + '%') : '';
+      const tierText = tierLabel ? (' \u2014 ' + tierLabel) : '';
+      aiVerdictEl.textContent = (matched
+        ? ('Move played (' + actualDir + ') matches the AI\u2019s top pick.')
+        : ('AI would have played ' + evalOut.best.dir + ' instead of ' + actualDir + '.')) + accText + tierText;
+    }
+
+    if(aiStepCache.has(cacheKey)){
+      // Already evaluated -- either the user scrubbed here before, or a
+      // full-game analysis pass already covered this step. Show it right
+      // away with no recompute and no "Analyzing..." flicker.
+      aiDirsEl.classList.add('hidden');
+      aiVerdictEl.classList.add('hidden');
+      present(aiStepCache.get(cacheKey), true);
+      return;
+    }
+
+    // Not analyzed yet anywhere -- compute it on the spot for this position.
+    aiStatusEl.textContent = 'Analyzing (depth ' + depth + ')\u2026';
+    aiDirsEl.classList.add('hidden');
+    aiVerdictEl.classList.add('hidden');
+    setTimeout(() => {
+      if(idx !== curIndex || !aiEnableEl.checked) return; // stale
+      present(analyzeState(idx, depth), false);
+    }, 10);
+  }
+
+  function runFullAnalysis(){
+    if(!states.length || fullAnalysisRunning) return;
+    fullAnalysisRunning = true;
+    fullAnalysisCancelled = false;
+    const depth = parseInt(aiDepthEl.value, 10);
+    const total = states.length - 1;
+    fullAnalysis = new Array(total).fill(null);
+    aiProgressRow.classList.remove('hidden');
+    aiFullStats.classList.add('hidden');
+    aiAccuracyBreakdown.classList.add('hidden');
+    aiRunAllBtn.disabled = true;
+    let i = 0;
+    let matchCount = 0, deltaSum = 0, deltaCount = 0, accSum = 0, accCount = 0;
+    const tierCounts = {};
+
+    function step(){
+      if(fullAnalysisCancelled || i >= total){
+        finish();
+        return;
+      }
+      // Backgrounded tabs get their timers throttled (often to ~1 callback/sec),
+      // so instead of a fixed move-count per tick, do as much work as fits in a
+      // time budget -- a small one while visible (keeps the UI responsive), and
+      // a much larger one while hidden (so each rare callback still gets real
+      // work done and the analysis keeps advancing instead of stalling until
+      // the tab is refocused).
+      const budgetMs = document.hidden ? 400 : 12;
+      const batchStart = performance.now();
+      while(i < total && (performance.now() - batchStart) < budgetMs){
+        const evalOut = analyzeState(i, depth);
+        if(evalOut && evalOut.best){
+          const actualDir = states[i+1].dir;
+          const actualEntry = evalOut.results.find(r => r.dir === actualDir);
+          const matched = !!(actualEntry && actualEntry.isBest);
+          const acc = computeMoveAccuracy(evalOut, actualDir);
+          let tierKey = null;
+          if(actualEntry && actualEntry.moved){
+            const delta = evalOut.best.value - actualEntry.value;
+            tierKey = classifyAccuracy(delta, matched).key;
+          }
+          fullAnalysis[i] = { matched, mismatch: !matched, bestDir: evalOut.best.dir, bestValue: evalOut.best.value, actualValue: actualEntry ? actualEntry.value : null, accuracy: acc ? acc.accuracy : null, tierKey };
+          if(matched) matchCount++;
+          if(actualEntry && actualEntry.moved){
+            const delta = evalOut.best.value - actualEntry.value;
+            deltaSum += delta;
+            deltaCount++;
+            const tier = classifyAccuracy(delta, matched);
+            tierCounts[tier.key] = (tierCounts[tier.key] || 0) + 1;
+          }
+          if(acc){
+            accSum += acc.accuracy; accCount++;
+          }
+        }
+        i++;
+      }
+      aiProgressFill.style.width = Math.round(100*i/total) + '%';
+      aiProgressLabel.textContent = i + ' / ' + total;
+      setTimeout(step, 0);
+    }
+
+    function finish(){
+      fullAnalysisRunning = false;
+      aiProgressRow.classList.add('hidden');
+      aiRunAllBtn.disabled = false;
+      if(!fullAnalysisCancelled && total > 0){
+        aiFullStats.classList.remove('hidden');
+        aiMatchPctEl.textContent = Math.round(100*matchCount/total) + '%';
+        aiAvgDeltaEl.textContent = deltaCount ? deltaSum.toFixed(1) : '0';
+        const avgAccuracy = accCount ? accSum/accCount : 0;
+        aiAccuracyEl.textContent = accCount ? (Math.round(100*avgAccuracy) + '%') : '-';
+        renderAccuracyBreakdown(avgAccuracy, tierCounts, deltaCount);
+      } else if(fullAnalysisCancelled){
+        fullAnalysis = null;
+      }
+      drawChart();
+      if(pendingJumpTier){
+        const tk = pendingJumpTier;
+        pendingJumpTier = null;
+        if(fullAnalysis) jumpToTier(tk);
+      }
+    }
+
+    setTimeout(step, 0);
+  }
+
+  aiEnableEl.addEventListener('change', updateAiPanel);
+  aiDepthEl.addEventListener('change', () => { aiStepCache.clear(); updateAiPanel(); });
+  aiRunAllBtn.addEventListener('click', runFullAnalysis);
+  aiCancelBtn.addEventListener('click', () => { fullAnalysisCancelled = true; });
 
   function stopPlaying(){
     playing = false;
@@ -690,7 +1612,15 @@
     }
     mode = replay.mode;
     hasQueue = !!replay.hasQueue;
+    replayRef = replay;
     states = buildTimeline(replay);
+
+    aiStepCache.clear();
+    fullAnalysis = null;
+    fullAnalysisCancelled = true;
+    aiProgressRow.classList.add('hidden');
+    aiFullStats.classList.add('hidden');
+    aiAccuracyBreakdown.classList.add('hidden');
 
     if(previewPanelWrapEl) previewPanelWrapEl.classList.toggle('hidden', !hasQueue);
 
@@ -702,6 +1632,7 @@
     scrubEl.max = states.length - 1;
     dropZone.classList.add('hidden');
     viewerArea.classList.remove('hidden');
+    updateChartStats();
     renderState(0);
   }
 
@@ -772,6 +1703,7 @@
       positionEl(el, Math.floor(idx/SIZE), idx%SIZE);
     });
     renderState(curIndex);
+    drawChart();
   });
 })();
 </script>
