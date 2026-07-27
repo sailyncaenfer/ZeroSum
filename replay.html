@@ -512,6 +512,41 @@
   .acc-row.tier-bad .acc-bar-fill{ background:#c85f3a; }
   .acc-row.tier-blunder .acc-label{ color:#ec6a52; }
   .acc-row.tier-blunder .acc-bar-fill{ background:#c73f28; }
+
+  /* ---------- Video export modal ---------- */
+  .export-overlay{
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center;
+    z-index: 50;
+    padding: 3vmin;
+  }
+  .export-overlay.hidden{ display:none; }
+  .export-modal{
+    background: var(--panel);
+    border-radius: 1.6vmin;
+    padding: 2.4vmin;
+    width: min(90vmin, 460px);
+    display:flex;
+    flex-direction:column;
+    gap: 1.6vmin;
+  }
+  .export-title{ font-size: 2vmin; font-weight:800; }
+  .export-canvas-wrap{
+    display:flex; align-items:center; justify-content:center;
+    background: var(--board);
+    border-radius: 1.2vmin;
+    padding: 1.2vmin;
+  }
+  .export-canvas-wrap canvas{ width:100%; height:auto; display:block; border-radius: 0.8vmin; }
+  .export-row{ display:flex; align-items:center; gap: 1.2vmin; font-size: 1.5vmin; }
+  .export-row input[type=range]{ flex:1; }
+  .export-speed-label{
+    font-family: "SF Mono","JetBrains Mono","Consolas",monospace;
+    min-width: 6vmin; text-align:right; color: var(--accent); font-weight:700;
+  }
+  .export-status{ font-size: 1.4vmin; color: var(--muted); min-height: 1.8vmin; }
+  .export-btn-row{ display:flex; gap: 1.2vmin; justify-content:flex-end; }
 </style>
 </head>
 <body>
@@ -562,6 +597,7 @@
           <button class="btn" id="playBtn">&#9654; Play</button>
           <button class="btn" id="startBtn">&#8676; Start</button>
           <button class="btn" id="endBtn">End &#8677;</button>
+          <button class="btn" id="exportVideoBtn">Export video</button>
           <button class="btn" id="loadAnotherBtn">Load another file</button>
         </div>
       </div>
@@ -586,6 +622,8 @@
           <span>Moves <b id="statMoves">0</b></span>
           <span>Best single gain <b id="statBestGain">0</b></span>
           <span>Avg gain/move <b id="statAvgGain">0</b></span>
+          <span>Avg tile count <b id="statAvgTiles">0</b></span>
+          <span>Zero-merge ratio <b id="statZeroRatio">&mdash;</b></span>
         </div>
       </div>
 
@@ -626,6 +664,27 @@
       </div>
 
      </div>
+    </div>
+  </div>
+
+  <div class="export-overlay hidden" id="exportOverlay">
+    <div class="export-modal">
+      <div class="export-title">Export video</div>
+      <div class="export-canvas-wrap"><canvas id="exportCanvas" width="672" height="768"></canvas></div>
+      <div class="export-row" id="exportSpeedRow">
+        <span>Speed</span>
+        <input type="range" id="exportSpeedRange" min="0.25" max="4" step="0.25" value="1">
+        <span class="export-speed-label" id="exportSpeedLabel">1&times;</span>
+      </div>
+      <div class="export-row" style="justify-content:space-between;">
+        <span style="color:var(--muted);">Estimated length</span>
+        <span class="export-speed-label" id="exportLengthEstimate">&mdash;</span>
+      </div>
+      <div class="export-status" id="exportStatus"></div>
+      <div class="export-btn-row">
+        <button class="btn" id="exportCancelBtn">Cancel</button>
+        <button class="btn" id="exportStartBtn">Start recording</button>
+      </div>
     </div>
   </div>
 
@@ -757,6 +816,7 @@
     const occ = (r,c) => tiles.find(t => t.r===r && t.c===c);
     const lines = getLineCoords(dir);
     let scoreGain = 0;
+    let cancelCount = 0, combineCount = 0;
     const removedIds = new Set();
 
     for(const line of lines){
@@ -773,11 +833,13 @@
           if(result){
             scoreGain += result.scoreGain;
             if(result.type === 'cancel'){
+              cancelCount++;
               removedIds.add(a.id);
               removedIds.add(b.id);
               lineTiles[i] = null;
               lineTiles[i+1] = null;
             } else {
+              combineCount++;
               a.value = result.value;
               removedIds.add(b.id);
               lineTiles[i+1] = null;
@@ -795,7 +857,7 @@
 
     const survivors = tiles.filter(t => !removedIds.has(t.id));
     if(survivors.length === 0) scoreGain += ZERO_CLEAR_BONUS;
-    return { tiles: survivors, scoreGain };
+    return { tiles: survivors, scoreGain, cancelCount, combineCount };
   }
 
   // ================= Expectimax AI (ported from zerosum_ai.c) =================
@@ -999,7 +1061,7 @@
 
   function buildTimeline(replay){
     let idCounter = 1;
-    const states = []; // { tiles:[{id,value,r,c}], score, dir|null, queue:[{value,boundary}...] }
+    const states = []; // { tiles:[{id,value,r,c}], score, dir|null, queue:[{value,boundary}...], cancelCount, combineCount }
 
     let tiles = replay.initialSpawns.map(s => ({
       id: idCounter++,
@@ -1008,20 +1070,23 @@
       c: s.pos % SIZE
     }));
     let score = 0;
-    states.push({ tiles: tiles.map(t=>({...t})), score, dir: null, queue: queueForStateIndex(replay, 0) });
+    let cancelTotal = 0, combineTotal = 0;
+    states.push({ tiles: tiles.map(t=>({...t})), score, dir: null, queue: queueForStateIndex(replay, 0), cancelCount: 0, combineCount: 0 });
 
     for(let m = 0; m < replay.moves.length; m++){
       const move = replay.moves[m];
       const result = applyMove(tiles, move.dir, replay.mode, score);
       tiles = result.tiles;
       score += result.scoreGain;
+      cancelTotal += result.cancelCount;
+      combineTotal += result.combineCount;
       tiles.push({
         id: idCounter++,
         value: move.spawn.value,
         r: Math.floor(move.spawn.pos / SIZE),
         c: move.spawn.pos % SIZE
       });
-      states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: queueForStateIndex(replay, m + 1) });
+      states.push({ tiles: tiles.map(t=>({...t})), score, dir: move.dir, queue: queueForStateIndex(replay, m + 1), cancelCount: cancelTotal, combineCount: combineTotal });
     }
 
     return states;
@@ -1046,9 +1111,19 @@
   const stepBackBtn = document.getElementById('stepBackBtn');
   const stepFwdBtn = document.getElementById('stepFwdBtn');
   const loadAnotherBtn = document.getElementById('loadAnotherBtn');
+  const exportVideoBtn = document.getElementById('exportVideoBtn');
+  const exportOverlay = document.getElementById('exportOverlay');
+  const exportCanvas = document.getElementById('exportCanvas');
+  const exportSpeedRange = document.getElementById('exportSpeedRange');
+  const exportSpeedLabel = document.getElementById('exportSpeedLabel');
+  const exportLengthEstimate = document.getElementById('exportLengthEstimate');
+  const exportStatus = document.getElementById('exportStatus');
+  const exportCancelBtn = document.getElementById('exportCancelBtn');
+  const exportStartBtn = document.getElementById('exportStartBtn');
 
   let states = [];
   let mode = 'zerosum';
+  let currentFileName = '';
   let curIndex = 0;
   let playing = false;
   let playTimer = null;
@@ -1065,6 +1140,8 @@
   const statMovesEl = document.getElementById('statMoves');
   const statBestGainEl = document.getElementById('statBestGain');
   const statAvgGainEl = document.getElementById('statAvgGain');
+  const statAvgTilesEl = document.getElementById('statAvgTiles');
+  const statZeroRatioEl = document.getElementById('statZeroRatio');
 
   // ---- AI panel ----
   const aiEnableEl = document.getElementById('aiEnable');
@@ -1259,6 +1336,24 @@
     statMovesEl.textContent = moves;
     statBestGainEl.textContent = bestGain;
     statAvgGainEl.textContent = moves ? (totalGain/moves).toFixed(1) : '0';
+
+    // Average tile count across every recorded state (initial spawn plus
+    // the position after every move).
+    let tileSum = 0;
+    for(const st of states) tileSum += st.tiles.length;
+    const avgTiles = states.length ? tileSum / states.length : 0;
+    statAvgTilesEl.textContent = avgTiles.toFixed(2);
+
+    // Zero-merge ratio: of all merges that happened over the whole game
+    // (cancel merges, where two opposite tiles annihilate to 0, plus
+    // combine merges, where a small tile folds into a larger one), what
+    // fraction were cancels. cancelCount/combineCount are cumulative
+    // totals stored on each state, so the final state holds the game total.
+    const lastState = states[states.length-1];
+    const totalMerges = (lastState.cancelCount||0) + (lastState.combineCount||0);
+    statZeroRatioEl.textContent = totalMerges
+      ? (100 * lastState.cancelCount / totalMerges).toFixed(1) + '%'
+      : '\u2014';
   }
 
   function chartIndexFromEvent(e){
@@ -1620,10 +1715,10 @@
       aiRunAllBtn.disabled = false;
       if(!fullAnalysisCancelled && total > 0){
         aiFullStats.classList.remove('hidden');
-        aiMatchPctEl.textContent = Math.round(100*matchCount/total) + '%';
+        aiMatchPctEl.textContent = (100*matchCount/total).toFixed(2) + '%';
         aiAvgDeltaEl.textContent = deltaCount ? deltaSum.toFixed(1) : '0';
         const avgAccuracy = accCount ? accSum/accCount : 0;
-        aiAccuracyEl.textContent = accCount ? (Math.round(100*avgAccuracy) + '%') : '-';
+        aiAccuracyEl.textContent = accCount ? (100*avgAccuracy).toFixed(2) + '%' : '-';
         renderAccuracyBreakdown(avgAccuracy, tierCounts, deltaCount);
       } else if(fullAnalysisCancelled){
         fullAnalysis = null;
@@ -1659,6 +1754,299 @@
       renderState(curIndex+1);
     }, 260);
   }
+
+  // ================= Video export =================
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  const EXPORT_PAD = 32;
+  const EXPORT_BOARD_SIZE = 608;
+  const EXPORT_H = 768;
+  const EXPORT_QUEUE_GAP = 24;
+  const EXPORT_QUEUE_WIDTH = 152;
+
+  function setExportCanvasSize(){
+    const w = EXPORT_PAD + EXPORT_BOARD_SIZE + (hasQueue ? (EXPORT_QUEUE_GAP + EXPORT_QUEUE_WIDTH) : 0) + EXPORT_PAD;
+    exportCanvas.width = w;
+    exportCanvas.height = EXPORT_H;
+  }
+
+  function exportBoardMetrics(){
+    const w = exportCanvas.width, h = exportCanvas.height;
+    const pad = EXPORT_PAD;
+    const boardSize = EXPORT_BOARD_SIZE;
+    const boardTop = h - pad - boardSize; // same margin below the board as left/right
+    const gap = 14;
+    const cell = (boardSize - 5 * gap) / 4;
+    const queueX = pad + boardSize + EXPORT_QUEUE_GAP;
+    return { w, h, pad, boardSize, boardTop, gap, cell, queueX, queueWidth: EXPORT_QUEUE_WIDTH };
+  }
+
+  function drawExportQueue(ctx, queueX, queueWidth, boardTop, queue){
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#77777c';
+    ctx.font = '700 12px -apple-system, Helvetica, Arial, sans-serif';
+    const cx = queueX + queueWidth / 2;
+    ctx.fillText('NEXT', cx, boardTop + 14);
+
+    const tileSize = Math.min(queueWidth * 0.72, 92);
+    let y = boardTop + 34;
+    (queue || []).forEach(entry => {
+      if(entry.boundary){
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - tileSize / 2, y + 6);
+        ctx.lineTo(cx + tileSize / 2, y + 6);
+        ctx.stroke();
+        y += 14;
+        return;
+      }
+      const pos = entry.value > 0;
+      const x = cx - tileSize / 2;
+      ctx.fillStyle = pos ? '#0a0a0a' : '#f5f5f5';
+      roundRect(ctx, x, y, tileSize, tileSize, 12);
+      ctx.fill();
+      ctx.strokeStyle = pos ? '#2b2b2b' : '#d6d6d6';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = pos ? '#f5f5f5' : '#0a0a0a';
+      ctx.font = '800 ' + Math.round(tileSize * 0.4) + 'px "SF Mono", "Consolas", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.abs(entry.value)), cx, y + tileSize / 2 + 2);
+      ctx.textBaseline = 'alphabetic';
+      y += tileSize + 14;
+    });
+  }
+
+  function drawExportFrame(index){
+    const ctx = exportCanvas.getContext('2d');
+    const { w, h, pad, boardSize, boardTop, gap, cell, queueX, queueWidth } = exportBoardMetrics();
+    const st = states[index];
+    if(!st) return;
+
+    ctx.fillStyle = '#121213';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.font = '800 26px -apple-system, Helvetica, Arial, sans-serif';
+    const isNnzm = mode === 'nnzm';
+    const zeroFill = isNnzm ? '#0a0a0a' : '#f5f5f5';   // pos-bg / neg-bg
+    const zeroStroke = isNnzm ? '#cfcfcf' : '#3a3a3a';
+    const sumFill = isNnzm ? '#f5f5f5' : '#0a0a0a';    // neg-bg / pos-bg
+    const sumStroke = isNnzm ? '#3a3a3a' : '#cfcfcf';
+
+    let tx = pad;
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = zeroStroke;
+    ctx.strokeText('Zero', tx, 46);
+    ctx.fillStyle = zeroFill;
+    ctx.fillText('Zero', tx, 46);
+    tx += ctx.measureText('Zero').width;
+
+    ctx.strokeStyle = sumStroke;
+    ctx.strokeText('Sum', tx, 46);
+    ctx.fillStyle = sumFill;
+    ctx.fillText('Sum', tx, 46);
+    tx += ctx.measureText('Sum').width;
+
+    const titleW = tx - pad;
+    ctx.fillStyle = '#77777c';
+    ctx.font = '600 20px -apple-system, Helvetica, Arial, sans-serif';
+    ctx.fillText('replay', pad + titleW + 10, 46);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#77777c';
+    ctx.font = '700 13px "SF Mono", "Consolas", monospace';
+    ctx.fillText('SCORE', w - pad, 26);
+    ctx.fillStyle = '#f2f2f2';
+    ctx.font = '700 30px "SF Mono", "Consolas", monospace';
+    ctx.fillText(String(st.score), w - pad, 60);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#77777c';
+    ctx.font = '600 16px "SF Mono", "Consolas", monospace';
+    const dirTxt = st.dir ? (DIR_ARROW_BIG[st.dir] || '') : '';
+    ctx.fillText('step ' + index + ' / ' + (states.length - 1) + (dirTxt ? '   ' + dirTxt : ''), pad + boardSize / 2, 106);
+
+    ctx.fillStyle = '#232326';
+    roundRect(ctx, pad, boardTop, boardSize, boardSize, 22);
+    ctx.fill();
+
+    ctx.fillStyle = '#2c2c30';
+    for(let r = 0; r < SIZE; r++){
+      for(let c = 0; c < SIZE; c++){
+        const x = pad + gap + c * (cell + gap);
+        const y = boardTop + gap + r * (cell + gap);
+        roundRect(ctx, x, y, cell, cell, 14);
+        ctx.fill();
+      }
+    }
+
+    st.tiles.forEach(t => {
+      const x = pad + gap + t.c * (cell + gap);
+      const y = boardTop + gap + t.r * (cell + gap);
+      const pos = t.value > 0;
+      ctx.fillStyle = pos ? '#0a0a0a' : '#f5f5f5';
+      roundRect(ctx, x, y, cell, cell, 14);
+      ctx.fill();
+      ctx.strokeStyle = pos ? '#2b2b2b' : '#d6d6d6';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = pos ? '#f5f5f5' : '#0a0a0a';
+      ctx.font = '800 ' + Math.round(cell * 0.42) + 'px "SF Mono", "Consolas", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(Math.abs(t.value)), x + cell / 2, y + cell / 2 + 2);
+    });
+    ctx.textBaseline = 'alphabetic';
+
+    if(hasQueue){
+      drawExportQueue(ctx, queueX, queueWidth, boardTop, st.queue || []);
+    }
+  }
+
+  let exporting = false;
+  let exportCancelled = false;
+  let exportRecorder = null;
+  let exportChunks = [];
+
+  function pickExportMimeType(){
+    const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for(const c of candidates){
+      if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+    }
+    return '';
+  }
+
+  function estimatedExportSeconds(speed){
+    if(!states.length) return 0;
+    const baseInterval = 260 / speed;
+    return (states.length * baseInterval + 500) / 1000;
+  }
+
+  function formatDuration(sec){
+    if(sec < 60) return sec.toFixed(1) + 's';
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function updateExportLengthEstimate(){
+    const speed = parseFloat(exportSpeedRange.value) || 1;
+    exportLengthEstimate.textContent = formatDuration(estimatedExportSeconds(speed));
+  }
+
+  exportSpeedRange.addEventListener('input', () => {
+    exportSpeedLabel.textContent = parseFloat(exportSpeedRange.value) + '\u00d7';
+    updateExportLengthEstimate();
+  });
+
+  exportVideoBtn.addEventListener('click', () => {
+    if(!states.length) return;
+    stopPlaying();
+    exportStatus.textContent = '';
+    exportSpeedLabel.textContent = parseFloat(exportSpeedRange.value) + '\u00d7';
+    updateExportLengthEstimate();
+    setExportCanvasSize();
+    drawExportFrame(curIndex);
+    exportOverlay.classList.remove('hidden');
+  });
+
+  exportCancelBtn.addEventListener('click', () => {
+    if(exporting){
+      exportCancelled = true;
+      if(exportRecorder && exportRecorder.state !== 'inactive') exportRecorder.stop();
+    } else {
+      exportOverlay.classList.add('hidden');
+    }
+  });
+
+  exportStartBtn.addEventListener('click', () => {
+    if(exporting || !states.length) return;
+    if(!window.MediaRecorder || !exportCanvas.captureStream){
+      exportStatus.textContent = 'Video recording is not supported in this browser.';
+      return;
+    }
+    const mimeType = pickExportMimeType();
+    const speed = parseFloat(exportSpeedRange.value) || 1;
+    const stream = exportCanvas.captureStream(30);
+    exportChunks = [];
+    exportCancelled = false;
+
+    try{
+      exportRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000 })
+        : new MediaRecorder(stream);
+    }catch(err){
+      exportStatus.textContent = 'Could not start recording: ' + err.message;
+      return;
+    }
+
+    exportRecorder.ondataavailable = (e) => { if(e.data && e.data.size) exportChunks.push(e.data); };
+    exportRecorder.onstop = () => {
+      exporting = false;
+      exportStartBtn.disabled = false;
+      exportSpeedRange.disabled = false;
+      if(!exportCancelled && exportChunks.length){
+        const blob = new Blob(exportChunks, { type: (mimeType && mimeType.split(';')[0]) || 'video/webm' });
+        const base = currentFileName || 'zerosum-replay';
+        exportStatus.textContent = 'Preparing download\u2026';
+        const reader = new FileReader();
+        reader.onload = () => {
+          try{
+            const a = document.createElement('a');
+            a.href = reader.result;
+            a.download = base + '.webm';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            exportStatus.textContent = 'Saved ' + base + '.webm';
+            setTimeout(() => exportOverlay.classList.add('hidden'), 900);
+          }catch(err){
+            exportStatus.textContent = 'Could not trigger download: ' + err.message;
+          }
+        };
+        reader.onerror = () => { exportStatus.textContent = 'Could not prepare the video file for download.'; };
+        reader.readAsDataURL(blob);
+      } else {
+        exportStatus.textContent = 'Export cancelled.';
+      }
+    };
+
+    exporting = true;
+    exportStartBtn.disabled = true;
+    exportSpeedRange.disabled = true;
+    exportRecorder.start(250);
+
+    const baseInterval = 260 / speed;
+    let i = 0;
+    drawExportFrame(0);
+    exportStatus.textContent = 'Recording step 0 / ' + (states.length - 1) + '\u2026';
+
+    function step(){
+      if(exportCancelled) return;
+      i++;
+      if(i >= states.length){
+        exportStatus.textContent = 'Finishing\u2026';
+        setTimeout(() => { if(exportRecorder.state !== 'inactive') exportRecorder.stop(); }, 500);
+        return;
+      }
+      drawExportFrame(i);
+      exportStatus.textContent = 'Recording step ' + i + ' / ' + (states.length - 1) + '\u2026';
+      setTimeout(step, baseInterval);
+    }
+    setTimeout(step, baseInterval);
+  });
 
   function loadReplayFromBytes(bytes){
     let replay;
@@ -1696,6 +2084,7 @@
 
   function handleFile(file){
     if(!file) return;
+    currentFileName = file.name ? file.name.replace(/\.zsr$/i, '') : '';
     const reader = new FileReader();
     reader.onload = () => {
       const bytes = new Uint8Array(reader.result);

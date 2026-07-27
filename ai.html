@@ -624,16 +624,16 @@
       </button>
       <div class="ai-config">
         <label class="ai-field">
-          <span class="ai-field-label">Depth</span>
-          <input type="number" id="aiDepthInput" class="ai-field-input" step="1" value="3">
+          <span class="ai-field-label">Rollout Depth</span>
+          <input type="number" id="aiDepthInput" class="ai-field-input" step="1" value="8">
+        </label>
+        <label class="ai-field">
+          <span class="ai-field-label">Rollouts</span>
+          <input type="number" id="aiRolloutsInput" class="ai-field-input" step="1" value="300">
         </label>
         <label class="ai-field">
           <span class="ai-field-label">Max Time (ms)</span>
           <input type="number" id="aiMaxTimeInput" class="ai-field-input" step="1" value="1000">
-        </label>
-        <label class="ai-field">
-          <span class="ai-field-label">Min Time (ms)</span>
-          <input type="number" id="aiMinTimeInput" class="ai-field-input" step="1" value="0">
         </label>
       </div>
     </div>
@@ -669,8 +669,8 @@
       <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
 
       <h3>AI Auto-Play</h3>
-      <p>The <b>AI</b> button hands control to an expectimax search that looks ahead over its own possible moves and the tile that lands next. It searches iteratively -- depth 1, then 2, then 3, and so on, keeping the best move found so far and going one level deeper each time -- then plays the resulting move immediately.</p>
-      <p>The <b>Depth</b> field is a target, not a hard cap: if the search finishes that depth with time to spare before <b>Min Time</b> has elapsed, it keeps going deeper until that minimum is reached. <b>Max Time</b> is a hard ceiling -- the search always stops and plays its best move so far once that much time has passed, even mid-depth.</p>
+      <p>The <b>AI</b> button hands control to a Monte Carlo search. For each direction it could play right now, the AI plays out many random hypothetical futures -- random legal moves, tiles landing in a random empty cell -- and scores how each one turns out. The direction whose random futures scored best on average is the one it actually plays.</p>
+      <p><b>Rollout Depth</b> is how many moves ahead each random playout runs before it's scored. <b>Rollouts</b> is how many of these playouts get sampled for each candidate direction before it commits to a move -- more rollouts make for a steadier average (and stronger play) at the cost of more thinking time. <b>Max Time</b> is a hard ceiling: however many rollouts are left to do, the search stops and plays its best move so far once that much time has passed.</p>
 
       <h3>Replays</h3>
       <p>Tap <b>Save Replay</b> any time to download a compact <code>.zsr</code> replay file of the current game so far, including any moves played by the AI. Open it in <code>replay.html</code> to step or scroll through every move.</p>
@@ -761,7 +761,7 @@
   // clobbers the other variant's progress.
   const MODE_KEY = 'zerosum_mode_v1';
   const SAVE_KEYS = { zerosum: 'zerosum_save_v2', nnzm: 'zerosum_save_nnzm_v1' };
-  const BEST_KEYS = { zerosum: 'zerosum_best_v2', nnzm: 'zerosum_best_nnzm_v1' };
+  const BEST_KEYS = { zerosum: 'zerosum_best_ai_v2', nnzm: 'zerosum_best_nnzm_ai_v1' };
   let mode = 'zerosum';
   let modeSwitching = false;
   try{
@@ -1475,18 +1475,19 @@
     boardEl.classList.add('shake');
   }
 
-  // ================= AI (expectimax) =================
+  // ================= AI (Monte Carlo) =================
   // The AI operates purely on plain value arrays (length 16, null = empty),
   // mirroring doMove()'s line-merge logic but without touching DOM/tile
   // objects, so a search can explore thousands of hypothetical boards
-  // cheaply. Note that unlike a typical 2048 AI, the *value* of the next
-  // spawned tile isn't random here -- it's the next entry already sitting
-  // in the shuffled deck (that's what the "Next" preview shows). Only the
-  // empty cell it lands in is random, so the chance node only branches
-  // over placement, not over value, which keeps the search both cheaper
-  // and more accurate than guessing at a value distribution.
+  // cheaply. For each of the (up to four) legal first moves, it plays out
+  // many random future games -- random legal moves, tiles landing in a
+  // random empty cell -- for a fixed number of plies, then scores the
+  // outcome. The first move with the best average outcome across all its
+  // rollouts gets played. Unlike a typical 2048 AI, the *value* of each
+  // spawned tile isn't randomly guessed -- the rollout reads it straight
+  // from the shuffled deck (the same one behind the "Next" preview), so
+  // only the landing cell is randomized per rollout.
   const DIRS = ['left', 'right', 'up', 'down'];
-  const AI_CHANCE_SAMPLE_CAP = 6; // cap chance-node branching for speed
 
   function evaluateMergeAI(a, b, maxVal, combineOn){
     if(a + b === 0) return { type:'cancel', scoreGain: Math.abs(a) * 10 };
@@ -1565,91 +1566,103 @@
     return emptyCount*8 + cancelPotential*25 + combinePotential*6 - sumAbs*0.1;
   }
 
-  // Player ("max") node: try every direction, take the best.
-  function expectimaxMax(values, depth, ctx){
-    if(depth <= 0){
-      return boardHeuristic(values, ctx.combineOn);
-    }
-    let best = -Infinity;
-    let any = false;
-    for(const dir of DIRS){
-      const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
-      if(!moved) continue;
-      any = true;
-      const val = scoreGain + expectimaxChance(board, depth, ctx);
-      if(val > best) best = val;
-    }
-    if(!any) return boardHeuristic(values, ctx.combineOn) - 1000; // no moves = dead end, avoid it
-    return best;
+  // A tile value sampled from the same range the deck deals from (any
+  // value from -maxVal to maxVal, excluding 0). Used for spawns deep
+  // inside a hypothetical rollout, where the true future is unknowable
+  // anyway since it depends on a divergent, randomly-chosen path --
+  // unlike the one real, already-known next tile (see pickBestMove).
+  function randomTileValue(maxVal){
+    let v = 0;
+    while(v === 0) v = Math.floor(Math.random() * (2*maxVal + 1)) - maxVal;
+    return v;
   }
 
-  // Chance node: the next tile's value is already known (front of the
-  // deck); only its landing cell is random. Sample a bounded subset of
-  // empty cells when there are many, to keep branching factor in check.
-  function expectimaxChance(values, depth, ctx){
-    const empties = [];
-    for(let i=0;i<values.length;i++) if(values[i] == null) empties.push(i);
-    if(empties.length === 0) return expectimaxMax(values, depth-1, ctx);
-
-    let sample = empties;
-    if(sample.length > AI_CHANCE_SAMPLE_CAP){
-      const step = sample.length / AI_CHANCE_SAMPLE_CAP;
-      const picked = [];
-      for(let k=0;k<AI_CHANCE_SAMPLE_CAP;k++) picked.push(sample[Math.floor(k*step)]);
-      sample = picked;
-    }
-
+  // Plays one random game forward from `values` for up to `plies` moves:
+  // at each step every legal direction is a candidate and one is chosen
+  // uniformly at random, and each spawned tile lands in a uniformly
+  // random empty cell with a randomly sampled value. Stops early if a
+  // dead end (no legal move) is hit. Returns the score gained along the
+  // way plus a heuristic estimate of the resulting position, so a
+  // rollout that runs into a wall of clutter scores worse than one that
+  // stays open, even though both are "random".
+  function randomRollout(values, ctx, plies){
+    let board = values;
     let total = 0;
-    for(const idx of sample){
-      const board2 = values.slice();
-      board2[idx] = ctx.nextValue;
-      total += expectimaxMax(board2, depth-1, ctx);
+    for(let p=0; p<plies; p++){
+      const legal = [];
+      for(const dir of DIRS){
+        const sim = simulateMoveValues(board, dir, ctx.maxVal, ctx.combineOn);
+        if(sim.moved) legal.push(sim);
+      }
+      if(legal.length === 0) break; // dead end -- stop the rollout here
+      const choice = legal[Math.floor(Math.random() * legal.length)];
+      total += choice.scoreGain;
+      board = choice.board;
+
+      const empties = [];
+      for(let i=0;i<board.length;i++) if(board[i] == null) empties.push(i);
+      if(empties.length > 0){
+        const idx = empties[Math.floor(Math.random() * empties.length)];
+        board[idx] = randomTileValue(ctx.maxVal);
+      }
     }
-    return total / sample.length;
+    return total + boardHeuristic(board, ctx.combineOn);
   }
 
   // Returns the best direction to play, or null if no move is legal.
-  // Iterative deepening: search depth 1 first and remember its answer, then
-  // try depth 2, 3, ... replacing the answer each time a deeper search
-  // finishes. `targetDepth` is a soft target -- once it's reached, the search
-  // keeps deepening further as long as `minTimeMs` hasn't elapsed yet.
-  // `maxTimeMs` is a hard ceiling: the search stops and returns its best
-  // answer so far as soon as that much time has passed, even mid-depth.
-  function pickBestMove(targetDepth, minTimeMs, maxTimeMs){
+  // Monte Carlo move selection: each legal first move is scored by
+  // averaging `rolloutCount` random rollouts (see randomRollout) played
+  // out from it, run in rounds -- one per candidate direction each round,
+  // so every direction gets an equal number of samples. `maxTimeMs` is a
+  // safety cap only: if that many rounds would take too long on a slow
+  // device, the search stops early and returns its best answer so far
+  // instead of freezing the page. `targetDepth` sets how many plies each
+  // rollout plays forward.
+  function pickBestMove(targetDepth, rolloutCount, maxTimeMs){
     ensureDeck(1);
-    const values = boardValues();
-    const ctx = {
-      maxVal: currentMaxValue(),
-      combineOn: combineEnabled(),
-      nextValue: deck[0].value
-    };
+    const rootValues = boardValues();
+    const ctx = { maxVal: currentMaxValue(), combineOn: combineEnabled() };
+    const plies = Math.max(1, targetDepth);
+    const rounds = Math.max(1, rolloutCount);
+    // The tile that lands right after whichever move is actually played is
+    // already known -- it's the front of the shuffled deck, same value the
+    // "Next" preview shows -- so every rollout spawns it there rather than
+    // guessing. Everything deeper into a rollout is hypothetical, since it
+    // depends on a randomly-chosen path that may never actually happen, so
+    // those spawns use randomTileValue() instead.
+    const firstSpawnValue = deck[0].value;
+
+    const candidates = [];
+    for(const dir of DIRS){
+      const sim = simulateMoveValues(rootValues, dir, ctx.maxVal, ctx.combineOn);
+      if(sim.moved) candidates.push({ dir, board: sim.board, scoreGain: sim.scoreGain, total: 0, count: 0 });
+    }
+    if(candidates.length === 0) return null;
+    if(candidates.length === 1) return candidates[0].dir; // only one legal move -- no need to sample
 
     const startTime = performance.now();
     const elapsed = () => performance.now() - startTime;
 
-    let bestDir = null;
-    let depth = 1;
-
-    while(true){
-      let depthBestDir = null, depthBestScore = -Infinity;
-      for(const dir of DIRS){
-        const { board, moved, scoreGain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
-        if(!moved) continue;
-        const val = scoreGain + expectimaxChance(board, depth-1, ctx);
-        if(val > depthBestScore){ depthBestScore = val; depthBestDir = dir; }
-        if(elapsed() >= maxTimeMs) break; // bail mid-depth once the hard ceiling is hit
+    for(let r=0; r<rounds; r++){
+      for(const cand of candidates){
+        const board = cand.board.slice();
+        const empties = [];
+        for(let i=0;i<board.length;i++) if(board[i] == null) empties.push(i);
+        if(empties.length > 0){
+          const idx = empties[Math.floor(Math.random() * empties.length)];
+          board[idx] = firstSpawnValue;
+        }
+        cand.total += cand.scoreGain + randomRollout(board, ctx, plies);
+        cand.count++;
       }
-
-      if(depthBestDir !== null) bestDir = depthBestDir;
-
-      const outOfTime = elapsed() >= maxTimeMs;
-      const reachedTargetDepth = depth >= targetDepth;
-      const shouldKeepGoing = !outOfTime && (!reachedTargetDepth || elapsed() < minTimeMs);
-
-      if(!shouldKeepGoing) break;
-      depth++;
+      if(elapsed() >= maxTimeMs) break; // safety cap -- bail early rather than freeze the page
     }
 
+    let bestDir = candidates[0].dir, bestAvg = -Infinity;
+    for(const cand of candidates){
+      const avg = cand.total / cand.count;
+      if(avg > bestAvg){ bestAvg = avg; bestDir = cand.dir; }
+    }
     return bestDir;
   }
 
@@ -1658,8 +1671,8 @@
   const aiBtnState = document.getElementById('aiBtnState');
   const aiDepthInput = document.getElementById('aiDepthInput');
   const aiMaxTimeInput = document.getElementById('aiMaxTimeInput');
-  const aiMinTimeInput = document.getElementById('aiMinTimeInput');
-  const AI_CONFIG_KEY = 'zerosum_ai_config_v2';
+  const aiRolloutsInput = document.getElementById('aiRolloutsInput');
+  const AI_CONFIG_KEY = 'zerosum_ai_config_v3';
 
   let aiEnabled = false;
   let aiTimer = null;
@@ -1671,17 +1684,17 @@
     let maxTime = parseFloat(aiMaxTimeInput && aiMaxTimeInput.value);
     if(!Number.isFinite(maxTime)) maxTime = 1000;
 
-    let minTime = parseFloat(aiMinTimeInput && aiMinTimeInput.value);
-    if(!Number.isFinite(minTime)) minTime = 0;
+    let rollouts = parseInt(aiRolloutsInput && aiRolloutsInput.value, 10);
+    if(!Number.isFinite(rollouts)) rollouts = 300;
 
-    return { depth, maxTime, minTime };
+    return { depth, maxTime, rollouts };
   }
 
   function reflectAiConfig(){
     const cfg = aiConfig();
     if(aiDepthInput) aiDepthInput.value = cfg.depth;
     if(aiMaxTimeInput) aiMaxTimeInput.value = cfg.maxTime;
-    if(aiMinTimeInput) aiMinTimeInput.value = cfg.minTime;
+    if(aiRolloutsInput) aiRolloutsInput.value = cfg.rollouts;
   }
 
   function saveAiConfig(){
@@ -1696,7 +1709,7 @@
       if(!data) return;
       if(Number.isFinite(data.depth) && aiDepthInput) aiDepthInput.value = data.depth;
       if(Number.isFinite(data.maxTime) && aiMaxTimeInput) aiMaxTimeInput.value = data.maxTime;
-      if(Number.isFinite(data.minTime) && aiMinTimeInput) aiMinTimeInput.value = data.minTime;
+      if(Number.isFinite(data.rollouts) && aiRolloutsInput) aiRolloutsInput.value = data.rollouts;
     }catch(e){ /* ignore */ }
   }
 
@@ -1724,8 +1737,8 @@
       scheduleAiMove(120);
       return;
     }
-    const { depth, maxTime, minTime } = aiConfig();
-    const dir = pickBestMove(depth, minTime, maxTime);
+    const { depth, maxTime, rollouts } = aiConfig();
+    const dir = pickBestMove(depth, rollouts, maxTime);
     if(!dir){
       // No legal move -- the game is effectively over; stop spinning.
       setAiEnabled(false);
@@ -1743,8 +1756,8 @@
   if(aiMaxTimeInput){
     aiMaxTimeInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
   }
-  if(aiMinTimeInput){
-    aiMinTimeInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
+  if(aiRolloutsInput){
+    aiRolloutsInput.addEventListener('change', () => { reflectAiConfig(); saveAiConfig(); });
   }
   loadAiConfig();
   reflectAiConfig();
