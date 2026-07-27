@@ -655,6 +655,7 @@
           <span>Game accuracy <b id="aiAccuracy">-</b></span>
           <span>Moves matching AI <b id="aiMatchPct">-</b></span>
           <span>Avg step score vs AI-best <b id="aiAvgDelta">-</b></span>
+          <span>Zero Rating <b id="aiZeroRating">-</b></span>
         </div>
         <div class="hidden" id="aiAccuracyBreakdown">
           <div class="acc-headline" id="aiAccHeadline">-</div>
@@ -1157,6 +1158,7 @@
   const aiFullStats = document.getElementById('aiFullStats');
   const aiMatchPctEl = document.getElementById('aiMatchPct');
   const aiAvgDeltaEl = document.getElementById('aiAvgDelta');
+  const aiZeroRatingEl = document.getElementById('aiZeroRating');
   const aiAccuracyEl = document.getElementById('aiAccuracy');
   const aiAccuracyBreakdown = document.getElementById('aiAccuracyBreakdown');
   const aiAccHeadline = document.getElementById('aiAccHeadline');
@@ -1603,6 +1605,26 @@
   // of the Chosen, Best, and Worst among the legal moves available at that
   // state. 1.0 = played the best move, 0.0 = played the worst. When only
   // one legal move exists (B===W) that move is trivially optimal -> 1.0.
+  function scoreFactor(score) {
+    const TARGET = 70000;
+    const K = 5;
+
+    score = Math.max(0, Math.min(score, TARGET));
+
+    return (1 - Math.exp(-K * score / TARGET)) /
+           (1 - Math.exp(-K));
+  }
+
+  function ratingFromAccuracy(accuracy, finalScore) {
+    const accuracyFactor = Math.sqrt(accuracy);
+    return 25000 * accuracyFactor * scoreFactor(finalScore);
+  }
+
+  function formatZeroRating(accuracy, finalScore){
+    const rating = Math.round(ratingFromAccuracy(accuracy, finalScore));
+    return rating + ' ZR';
+  }
+
   function computeMoveAccuracy(evalOut, actualDir){
     const valid = evalOut.results.filter(r => r.moved);
     if(!valid.length) return null;
@@ -1885,6 +1907,8 @@
         aiAvgDeltaEl.textContent = deltaCount ? deltaSum.toFixed(1) : '0';
         const avgAccuracy = accCount ? accSum/accCount : 0;
         aiAccuracyEl.textContent = accCount ? (100*avgAccuracy).toFixed(2) + '%' : '-';
+        const finalScore = states.length ? states[states.length-1].score : 0;
+        aiZeroRatingEl.textContent = accCount ? formatZeroRating(avgAccuracy, finalScore) : '-';
         renderAccuracyBreakdown(avgAccuracy, tierCounts, deltaCount);
       } else if(fullAnalysisCancelled){
         fullAnalysis = null;
