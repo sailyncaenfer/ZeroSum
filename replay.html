@@ -1169,6 +1169,188 @@
   let fullAnalysisRunning = false;
   let pendingJumpTier = null; // tier key to jump to once a triggered full analysis finishes
 
+  // ================= Parallel AI worker pool =================
+  // analyzeState() for any given index is a pure function of that state's
+  // board + queue -- it doesn't depend on any other state. That makes a
+  // full-game pass embarrassingly parallel: instead of grinding through
+  // every step on the main thread in small time-sliced batches (the old
+  // approach, throttled hard by requestAnimationFrame/background-tab
+  // timer clamping), we fan the work out across a pool of Web Workers,
+  // one per available core, each pulling the next unfinished step off a
+  // shared work queue as soon as it's free.
+  const AI_WORKER_SRC = `
+    const SIZE = 4;
+    const DIR_NAMES = ['left','right','up','down'];
+    const ZERO_CLEAR_BONUS = 5000;
+    const AI_CHANCE_SAMPLE_CAP = 6;
+    const TIE_EPSILON = 1e-6;
+
+    function getLineCoords(dir){
+      const lines = [];
+      if(dir==='left'){
+        for(let r=0;r<SIZE;r++){ const line=[]; for(let c=0;c<SIZE;c++) line.push({r,c}); lines.push(line); }
+      } else if(dir==='right'){
+        for(let r=0;r<SIZE;r++){ const line=[]; for(let c=SIZE-1;c>=0;c--) line.push({r,c}); lines.push(line); }
+      } else if(dir==='up'){
+        for(let c=0;c<SIZE;c++){ const line=[]; for(let r=0;r<SIZE;r++) line.push({r,c}); lines.push(line); }
+      } else if(dir==='down'){
+        for(let c=0;c<SIZE;c++){ const line=[]; for(let r=SIZE-1;r>=0;r--) line.push({r,c}); lines.push(line); }
+      }
+      return lines;
+    }
+
+    function evaluateMergeValues(a, b, maxVal, combineOn){
+      if(a + b === 0) return { type:'cancel', gain: Math.abs(a) * 10, val: 0 };
+      if(!combineOn) return null;
+      if(Math.abs(a) <= 3 || Math.abs(b) <= 3){
+        const sum = a + b;
+        if(sum !== 0 && Math.abs(sum) <= maxVal){
+          return { type:'combine', gain: Math.min(Math.abs(a), Math.abs(b)), val: sum };
+        }
+      }
+      return null;
+    }
+
+    function simulateMoveValues(values, dir, maxVal, combineOn){
+      const lines = getLineCoords(dir);
+      const out = values.slice();
+      let moved = false, scoreGain = 0;
+      for(const line of lines){
+        const idxs = line.map(p => p.r*SIZE + p.c);
+        const arr = idxs.map(ix => out[ix]);
+        const mergedInto = [false,false,false,false];
+        for(let i=0;i<3;i++){
+          if(arr[i+1] === 0) continue;
+          if(arr[i] === 0){
+            arr[i] = arr[i+1]; arr[i+1] = 0; moved = true;
+          } else if(!mergedInto[i]){
+            const res = evaluateMergeValues(arr[i], arr[i+1], maxVal, combineOn);
+            if(res){
+              scoreGain += res.gain;
+              if(res.type === 'cancel'){ arr[i] = 0; arr[i+1] = 0; }
+              else { arr[i] = res.val; arr[i+1] = 0; }
+              mergedInto[i] = true; moved = true;
+            }
+          }
+        }
+        for(let i=0;i<4;i++) out[idxs[i]] = arr[i];
+      }
+      let allEmpty = true;
+      for(let i=0;i<out.length;i++) if(out[i] !== 0){ allEmpty = false; break; }
+      if(allEmpty) scoreGain += ZERO_CLEAR_BONUS;
+      return { out, moved, gain: scoreGain };
+    }
+
+    function boardHeuristic(values, combineOn){
+      let emptyCount = 0, cancelPotential = 0, combinePotential = 0, sumAbs = 0;
+      for(let i=0;i<values.length;i++){
+        const v = values[i];
+        if(v === 0){ emptyCount++; continue; }
+        sumAbs += Math.abs(v);
+      }
+      for(let r=0;r<SIZE;r++){
+        for(let c=0;c<SIZE;c++){
+          const v = values[r*SIZE+c];
+          if(v === 0) continue;
+          if(c < SIZE-1){
+            const w = values[r*SIZE+c+1];
+            if(w !== 0){
+              if(v+w === 0) cancelPotential++;
+              else if(combineOn && (Math.abs(v) <= 3 || Math.abs(w) <= 3)) combinePotential++;
+            }
+          }
+          if(r < SIZE-1){
+            const w = values[(r+1)*SIZE+c];
+            if(w !== 0){
+              if(v+w === 0) cancelPotential++;
+              else if(combineOn && (Math.abs(v) <= 3 || Math.abs(w) <= 3)) combinePotential++;
+            }
+          }
+        }
+      }
+      return emptyCount*8.0 + cancelPotential*25.0 + combinePotential*6.0 - sumAbs*0.1;
+    }
+
+    function expectimaxMax(values, depth, ctx, ply){
+      if(depth <= 0) return boardHeuristic(values, ctx.combineOn);
+      let best = -Infinity, any = false;
+      for(const dir of DIR_NAMES){
+        const { out, moved, gain } = simulateMoveValues(values, dir, ctx.maxVal, ctx.combineOn);
+        if(!moved) continue;
+        any = true;
+        const val = gain + expectimaxChance(out, depth, ctx, ply);
+        if(val > best) best = val;
+      }
+      if(!any) return boardHeuristic(values, ctx.combineOn) - 1000.0;
+      return best;
+    }
+
+    function expectimaxChance(values, depth, ctx, ply){
+      if(ply >= ctx.queue.length) return boardHeuristic(values, ctx.combineOn);
+      const tileValue = ctx.queue[ply];
+      const empties = [];
+      for(let i=0;i<values.length;i++) if(values[i] === 0) empties.push(i);
+      if(empties.length === 0) return expectimaxMax(values, depth-1, ctx, ply+1);
+      let sample;
+      if(empties.length > AI_CHANCE_SAMPLE_CAP){
+        sample = [];
+        const step = empties.length / AI_CHANCE_SAMPLE_CAP;
+        for(let k=0;k<AI_CHANCE_SAMPLE_CAP;k++) sample.push(empties[Math.floor(k*step)]);
+      } else {
+        sample = empties;
+      }
+      let total = 0;
+      for(const idx of sample){
+        const board2 = values.slice();
+        board2[idx] = tileValue;
+        total += expectimaxMax(board2, depth-1, ctx, ply+1);
+      }
+      return total / sample.length;
+    }
+
+    function evaluateDirections(values, maxVal, combineOn, queue, depth){
+      const cappedDepth = Math.min(depth, queue.length);
+      const ctx = { maxVal, combineOn, queue };
+      const results = [];
+      for(const dir of DIR_NAMES){
+        const { out, moved, gain } = simulateMoveValues(values, dir, maxVal, combineOn);
+        if(!moved){ results.push({ dir, moved:false, value:null }); continue; }
+        const value = gain + expectimaxChance(out, cappedDepth-1, ctx, 0);
+        results.push({ dir, moved:true, value, gain });
+      }
+      let best = null;
+      for(const r of results) if(r.moved && (best === null || r.value > best.value)) best = r;
+      if(best){
+        for(const r of results) r.isBest = r.moved && Math.abs(r.value - best.value) < TIE_EPSILON;
+      }
+      return { results, best };
+    }
+
+    self.onmessage = (e) => {
+      const { runId, id, values, maxVal, combineOn, queue, depth } = e.data;
+      const evalOut = evaluateDirections(values, maxVal, combineOn, queue, depth);
+      self.postMessage({ runId, id, evalOut });
+    };
+  `;
+
+  let aiWorkerPool = null;
+  let analysisRunId = 0;
+
+  function getAiWorkerPool(){
+    if(aiWorkerPool) return aiWorkerPool;
+    if(typeof Worker === 'undefined') return null;
+    try{
+      const blob = new Blob([AI_WORKER_SRC], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      const n = Math.max(1, Math.min((navigator.hardwareConcurrency || 4), 8));
+      aiWorkerPool = [];
+      for(let i=0;i<n;i++) aiWorkerPool.push(new Worker(url));
+    }catch(err){
+      aiWorkerPool = null;
+    }
+    return aiWorkerPool;
+  }
+
   function applyModeVisuals(){
     if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
   }
@@ -1660,56 +1842,40 @@
     aiFullStats.classList.add('hidden');
     aiAccuracyBreakdown.classList.add('hidden');
     aiRunAllBtn.disabled = true;
-    let i = 0;
+
     let matchCount = 0, deltaSum = 0, deltaCount = 0, accSum = 0, accCount = 0;
     const tierCounts = {};
+    let completed = 0;
 
-    function step(){
-      if(fullAnalysisCancelled || i >= total){
-        finish();
-        return;
-      }
-      // Backgrounded tabs get their timers throttled (often to ~1 callback/sec),
-      // so instead of a fixed move-count per tick, do as much work as fits in a
-      // time budget -- a small one while visible (keeps the UI responsive), and
-      // a much larger one while hidden (so each rare callback still gets real
-      // work done and the analysis keeps advancing instead of stalling until
-      // the tab is refocused).
-      const budgetMs = document.hidden ? 400 : 12;
-      const batchStart = performance.now();
-      while(i < total && (performance.now() - batchStart) < budgetMs){
-        const evalOut = analyzeState(i, depth);
-        if(evalOut && evalOut.best){
-          const actualDir = states[i+1].dir;
-          const actualEntry = evalOut.results.find(r => r.dir === actualDir);
-          const matched = !!(actualEntry && actualEntry.isBest);
-          const acc = computeMoveAccuracy(evalOut, actualDir);
-          let tierKey = null;
-          if(actualEntry && actualEntry.moved){
-            const delta = evalOut.best.value - actualEntry.value;
-            tierKey = classifyAccuracy(delta, matched).key;
-          }
-          fullAnalysis[i] = { matched, mismatch: !matched, bestDir: evalOut.best.dir, bestValue: evalOut.best.value, actualValue: actualEntry ? actualEntry.value : null, accuracy: acc ? acc.accuracy : null, tierKey };
-          if(matched) matchCount++;
-          if(actualEntry && actualEntry.moved){
-            const delta = evalOut.best.value - actualEntry.value;
-            deltaSum += delta;
-            deltaCount++;
-            const tier = classifyAccuracy(delta, matched);
-            tierCounts[tier.key] = (tierCounts[tier.key] || 0) + 1;
-          }
-          if(acc){
-            accSum += acc.accuracy; accCount++;
-          }
+    function recordResult(i, evalOut){
+      if(evalOut && evalOut.best){
+        const actualDir = states[i+1].dir;
+        const actualEntry = evalOut.results.find(r => r.dir === actualDir);
+        const matched = !!(actualEntry && actualEntry.isBest);
+        const acc = computeMoveAccuracy(evalOut, actualDir);
+        let tierKey = null;
+        if(actualEntry && actualEntry.moved){
+          const delta = evalOut.best.value - actualEntry.value;
+          tierKey = classifyAccuracy(delta, matched).key;
         }
-        i++;
+        fullAnalysis[i] = { matched, mismatch: !matched, bestDir: evalOut.best.dir, bestValue: evalOut.best.value, actualValue: actualEntry ? actualEntry.value : null, accuracy: acc ? acc.accuracy : null, tierKey };
+        aiStepCache.set(i + ':' + depth, evalOut);
+        if(matched) matchCount++;
+        if(actualEntry && actualEntry.moved){
+          const delta = evalOut.best.value - actualEntry.value;
+          deltaSum += delta;
+          deltaCount++;
+          const tier = classifyAccuracy(delta, matched);
+          tierCounts[tier.key] = (tierCounts[tier.key] || 0) + 1;
+        }
+        if(acc){
+          accSum += acc.accuracy; accCount++;
+        }
       }
-      aiProgressFill.style.width = Math.round(100*i/total) + '%';
-      aiProgressLabel.textContent = i + ' / ' + total;
-      setTimeout(step, 0);
     }
 
     function finish(){
+      if(!fullAnalysisRunning) return; // already finished/cancelled once, don't double-run
       fullAnalysisRunning = false;
       aiProgressRow.classList.add('hidden');
       aiRunAllBtn.disabled = false;
@@ -1732,6 +1898,85 @@
       }
     }
 
+    if(total === 0){ finish(); return; }
+
+    const pool = getAiWorkerPool();
+    if(!pool){
+      // No Web Worker support (very old/locked-down browser) -- fall back
+      // to the original single-thread, time-sliced main-thread loop so the
+      // feature still works, just without the parallel speedup.
+      runFullAnalysisMainThreadFallback(depth, total, recordResult, finish);
+      return;
+    }
+
+    const myRun = ++analysisRunId;
+    let nextIndex = 0;
+
+    function updateProgress(){
+      aiProgressFill.style.width = Math.round(100*completed/total) + '%';
+      aiProgressLabel.textContent = completed + ' / ' + total;
+    }
+
+    // Hands the next piece of work to a worker that just freed up. Loops
+    // (rather than recurses) past any steps whose result is already sitting
+    // in aiStepCache -- e.g. re-running at a depth the user already scrubbed
+    // through by hand -- so those are instant and don't round-trip to a
+    // worker at all.
+    function assignNext(worker){
+      while(true){
+        if(fullAnalysisCancelled) return;
+        if(nextIndex >= total) return;
+        const i = nextIndex++;
+        const cacheKey = i + ':' + depth;
+        if(aiStepCache.has(cacheKey)){
+          recordResult(i, aiStepCache.get(cacheKey));
+          completed++;
+          updateProgress();
+          if(completed >= total){ finish(); return; }
+          continue;
+        }
+        const ctx = contextForState(i);
+        if(!ctx.queue.length){
+          fullAnalysis[i] = null; // terminal state, nothing to recommend
+          completed++;
+          updateProgress();
+          if(completed >= total){ finish(); return; }
+          continue;
+        }
+        worker.postMessage({ runId: myRun, id: i, values: ctx.values, maxVal: ctx.maxVal, combineOn: ctx.combineOn, queue: ctx.queue, depth });
+        return;
+      }
+    }
+
+    pool.forEach(worker => {
+      worker.onmessage = (e) => {
+        const msg = e.data;
+        if(msg.runId !== myRun) return; // stale reply from a cancelled/older run
+        recordResult(msg.id, msg.evalOut);
+        completed++;
+        updateProgress();
+        if(fullAnalysisCancelled || completed >= total){ finish(); return; }
+        assignNext(worker);
+      };
+      assignNext(worker);
+    });
+  }
+
+  // Fallback path only used when Web Workers aren't available at all.
+  function runFullAnalysisMainThreadFallback(depth, total, recordResult, finish){
+    let i = 0;
+    function step(){
+      if(fullAnalysisCancelled || i >= total){ finish(); return; }
+      const budgetMs = document.hidden ? 400 : 12;
+      const batchStart = performance.now();
+      while(i < total && (performance.now() - batchStart) < budgetMs){
+        recordResult(i, analyzeState(i, depth));
+        i++;
+      }
+      aiProgressFill.style.width = Math.round(100*i/total) + '%';
+      aiProgressLabel.textContent = i + ' / ' + total;
+      setTimeout(step, 0);
+    }
     setTimeout(step, 0);
   }
 
