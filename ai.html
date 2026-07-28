@@ -692,6 +692,10 @@
   // bag of a game, which has nothing before it to mark a boundary against).
   let deck = [];
   let anyBlockGenerated = false;
+  // Tracks the tile-value range used for the most recently shuffled bag, so
+  // we can tell when a bag introduces a brand-new max value (i.e. the range
+  // just grew because a 10,000-point step was crossed).
+  let lastBlockRange = null;
 
   function newShuffledBlock(){
     const range = currentMaxValue();  
@@ -701,6 +705,24 @@
       const j = Math.floor(Math.random()*(i+1));
       [block[i],block[j]] = [block[j],block[i]];
     }
+    // If this bag's range grew from the last bag's, keep the brand-new
+    // extreme value(s) from landing right at the front where they'd be
+    // visible in the "Next" preview -- reinsert them later in this bag.
+    if(lastBlockRange !== null && range > lastBlockRange){
+      const priorRange = lastBlockRange;
+      const isNew = v => Math.abs(v) > priorRange;
+      const fresh = block.filter(isNew);
+      const rest = block.filter(v => !isNew(v));
+      const minIndex = Math.max(0, QUEUE_PREVIEW_LEN - deck.length);
+      for(const v of fresh){
+        const span = Math.max(0, rest.length - minIndex);
+        const insertAt = Math.min(rest.length, minIndex + Math.floor(Math.random() * (span + 1)));
+        rest.splice(insertAt, 0, v);
+      }
+      block.length = 0;
+      block.push(...rest);
+    }
+    lastBlockRange = range;
     return block.map((v, idx) => ({ value: v, boundary: idx===0 && anyBlockGenerated }));
   }
 
@@ -878,7 +900,7 @@
       writeQueueEntry(bw, q);
     }
     const payload = bw.finish();
-    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x33]); // "ZSR3" -- v3 records the queue as it was at save time (once)
+    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x34]); // "ZSR4" -- same layout as v3; bumped because new-max tiles after a step increase are now hidden deeper in the bag
     const out = new Uint8Array(magic.length + payload.length);
     out.set(magic, 0);
     out.set(payload, magic.length);
@@ -1086,6 +1108,7 @@
         best: best,
         deck: deck,
         anyBlockGenerated: anyBlockGenerated,
+        lastBlockRange: lastBlockRange,
         tileIdCounter: tileIdCounter,
         gameOver: gameOver,
         replayLog: replayLog
@@ -1118,6 +1141,7 @@
     best = Math.max(best, data.best || 0);
     deck = data.deck.slice();
     anyBlockGenerated = !!data.anyBlockGenerated;
+    lastBlockRange = (typeof data.lastBlockRange === 'number') ? data.lastBlockRange : currentMaxValue();
     tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
     gameOver = !!data.gameOver;
     busy = false;
@@ -1243,6 +1267,7 @@
     overlayEl.classList.remove('flash');
     deck = [];
     anyBlockGenerated = false;
+    lastBlockRange = null;
     buildCellBackgrounds();
     resetReplayLog();
 
@@ -1287,6 +1312,7 @@
       // Reject this opening and restore the deck.
       deck = [];
       anyBlockGenerated = false;
+      lastBlockRange = null;
   }
 
     tiles.forEach(t => createTileEl(t));

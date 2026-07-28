@@ -736,10 +736,14 @@
     // v3 ("ZSR3") only records one queue snapshot, taken at save time (which
     // may be mid-game or at game over), so the replay can show the "Next"
     // tiles as they stood at that moment.
-    const hasQueue = version === 0x32 || version === 0x33;
+    // v4 ("ZSR4") uses the exact same on-disk layout as v3 -- it just marks
+    // replays recorded after the game started hiding a freshly-unlocked max
+    // tile deeper in the bag (instead of letting it shuffle in anywhere,
+    // including right at the front of the "Next" preview).
+    const hasQueue = version === 0x32 || version === 0x33 || version === 0x34;
     const hasPerMoveQueue = version === 0x32;
-    const hasFinalQueue = version === 0x33;
-    if(version !== 0x31 && version !== 0x32 && version !== 0x33){
+    const hasFinalQueue = version === 0x33 || version === 0x34;
+    if(version !== 0x31 && version !== 0x32 && version !== 0x33 && version !== 0x34){
       throw new Error('Not a valid .zsr file (bad magic header)');
     }
     const br = new BitReader(bytes.subarray(4));
