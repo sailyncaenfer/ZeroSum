@@ -1606,18 +1606,30 @@
   // state. 1.0 = played the best move, 0.0 = played the worst. When only
   // one legal move exists (B===W) that move is trivially optimal -> 1.0.
   function scoreFactor(score) {
-    const TARGET = 70000;
-    const K = 5;
+  const TARGET = 75000;
+  score = Math.max(0, Math.min(score, TARGET));
+  // log scale: 0 -> 0, TARGET -> 1
+  return Math.log(1 + score) / Math.log(1 + TARGET);
+}
 
-    score = Math.max(0, Math.min(score, TARGET));
-
-    return (1 - Math.exp(-K * score / TARGET)) /
-           (1 - Math.exp(-K));
-  }
+function scoreFactor(score) {
+  const TARGET = 75000;
+  score = Math.max(0, Math.min(score, TARGET));
+  // log scale: 0 -> 0, TARGET -> 1
+  return Math.log(1 + score) / Math.log(1 + TARGET);
+}
 
   function ratingFromAccuracy(accuracy, finalScore) {
-    const accuracyFactor = Math.sqrt(accuracy);
-    return 25000 * accuracyFactor * scoreFactor(finalScore);
+    const scoreFrac = scoreFactor(finalScore);
+
+    // At accuracy = 1, blend always resolves to 1, so rating is always
+    // 25000 no matter what the score is. At accuracy = 0, rating is
+    // always 0 no matter what the score is. In between, score only
+    // determines how much of the "gap" below full accuracy gets closed —
+    // and because accuracy also multiplies the whole thing (and appears
+    // squared in the second term), accuracy dominates the result.
+    const blend = scoreFrac + accuracy * (1 - scoreFrac);
+    return 25000 * accuracy * blend;
   }
 
   function formatZeroRating(accuracy, finalScore){
