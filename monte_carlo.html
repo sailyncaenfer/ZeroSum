@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
 <title>ZeroSum</title>
 <style>
   :root{
@@ -17,12 +17,8 @@
     --neg-bg: #f5f5f5;
     --neg-fg: #0a0a0a;
     --muted: #77777c;
-    --gap: clamp(6px, 2vmin, 12px);
-    --cellsize: clamp(46px, 14vmin, 76px);
-    --safe-t: env(safe-area-inset-top, 0px);
-    --safe-r: env(safe-area-inset-right, 0px);
-    --safe-b: env(safe-area-inset-bottom, 0px);
-    --safe-l: env(safe-area-inset-left, 0px);
+    --gap: 1.4vmin;
+    --cellsize: 17vmin;
   }
   *{ box-sizing: border-box; }
   html,body{
@@ -36,30 +32,17 @@
   body{
     display:flex; align-items:flex-start; justify-content:center;
     min-height:100vh;
-    min-height:100dvh;
     overflow-y: auto;
-    overflow-x: hidden;
     touch-action: pan-y;
     user-select: none;
   }
   .app{
     width: min(94vmin, 480px);
-    max-width: calc(100vw - var(--safe-l) - var(--safe-r));
-    box-sizing: border-box;
-    padding: max(clamp(8px, 2vmin, 14px), var(--safe-t)) max(clamp(8px, 2vmin, 14px), var(--safe-r)) max(clamp(12px, 3vmin, 20px), var(--safe-b)) max(clamp(8px, 2vmin, 14px), var(--safe-l));
+    padding: 2vmin 2vmin 3vmin;
     display:flex;
     flex-direction:column;
     align-items:center;
     gap: 2vmin;
-    opacity: 0;
-    transform: scale(0.98);
-    pointer-events: none;
-    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(.2,1,.3,1);
-  }
-  .app.started{
-    opacity: 1;
-    transform: scale(1);
-    pointer-events: auto;
   }
 
   /* ---------- Header (scores only) ---------- */
@@ -79,11 +62,11 @@
     .board-row {
         display: flex;
         align-items: flex-start;
-        gap: clamp(10px, 3vmin, 16px);
+        gap: 3.6vmin;
     }
 
   .title{
-    font-size: clamp(32px, 7.6vmin, 92px);
+    font-size: 7.6vmin;
     font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 0.85;
@@ -92,6 +75,7 @@
   .title .zero{
     color: var(--neg-bg);
     -webkit-text-stroke: 0.14vmin #3a3a3a;
+    cursor: default;
   }
   .title .sum{
     color: var(--pos-bg);
@@ -114,289 +98,6 @@
     margin-top: 0.4vmin;
     font-weight: 600;
   }
-
-  /* ---------- Menu button (opens full-screen main menu) ---------- */
-  .menu-btn{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background: var(--panel);
-    border: none;
-    border-radius: 50%;
-    width: clamp(38px, 5.2vmin, 52px);
-    height: clamp(38px, 5.2vmin, 52px);
-    padding: 0;
-    margin-top: 0.9vmin;
-    color: #d8d8d8;
-    font-family: inherit;
-    cursor: pointer;
-    box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
-    transition: color 0.15s ease, transform 0.1s ease;
-    touch-action: manipulation;
-  }
-  .menu-btn:hover{ color: var(--accent); }
-  .menu-btn:active{ transform: scale(0.97); }
-  .menu-btn .hamburger{
-    width: 1.9vmin;
-    height: 1.9vmin;
-    flex-shrink: 0;
-  }
-
-  /* ---------- Full-screen main menu ---------- */
-  .main-menu{
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding: 5vmin 4vmin;
-    background: rgba(10,10,11,0.0);
-    backdrop-filter: blur(0px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.28s ease, background 0.28s ease, backdrop-filter 0.28s ease;
-  }
-  .main-menu.open{
-    opacity: 1;
-    pointer-events: auto;
-    background: var(--bg);
-  }
-  .main-menu-panel{
-    width: min(100%, 520px);
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap: 3.4vmin;
-    transform: translateY(2vmin) scale(0.97);
-    opacity: 0;
-    transition: transform 0.28s cubic-bezier(.2,1,.3,1), opacity 0.24s ease;
-  }
-  .main-menu.open .main-menu-panel{
-    transform: translateY(0) scale(1);
-    opacity: 1;
-    transition-delay: 0.05s;
-  }
-  .main-menu-title{
-    font-size: 6.4vmin;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 0.85;
-    text-align:center;
-  }
-  .main-menu-title .zero{
-    color: var(--neg-bg);
-    -webkit-text-stroke: 0.14vmin #3a3a3a;
-  }
-  .main-menu-title .sum{
-    color: var(--pos-bg);
-    -webkit-text-stroke: 0.14vmin #cfcfcf;
-  }
-
-  /* ---------- Menu screens (intro / modes / options) ---------- */
-  .menu-screen{
-    display:none;
-    flex-direction:column;
-    align-items:center;
-    gap: 3.4vmin;
-    width:100%;
-    opacity: 0;
-    transition: opacity 0.18s ease;
-  }
-  .menu-screen.active{
-    display:flex;
-  }
-  .menu-screen.active.shown{
-    opacity: 1;
-  }
-
-  .intro-title-row{
-    display:flex;
-    justify-content:center;
-    font-size: clamp(30px, 6.4vmin, 78px);
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    line-height: 0.85;
-    transform: translateY(0);
-    transition: transform 0.55s cubic-bezier(.2,1,.3,1);
-  }
-  .intro-title-row.raise{
-    transform: translateY(-3.2vmin);
-  }
-  .intro-letters{
-    opacity: 0;
-    display:inline-block;
-  }
-  .intro-letters.zero{
-    color: var(--neg-bg);
-    -webkit-text-stroke: 0.14vmin #3a3a3a;
-    animation: introSlideLeft 0.85s cubic-bezier(.2,1,.3,1) forwards;
-    animation-delay: 0.6s;
-  }
-  .intro-letters.sum{
-    color: var(--pos-bg);
-    -webkit-text-stroke: 0.14vmin #cfcfcf;
-    animation: introSlideRight 0.85s cubic-bezier(.2,1,.3,1) forwards;
-    animation-delay: 1.5s;
-  }
-  .intro-title-row.settled .intro-letters{
-    opacity: 1;
-    animation: none;
-  }
-  @keyframes introSlideLeft{
-    0%{ opacity:0; transform: translateX(-8vmin); }
-    100%{ opacity:1; transform: translateX(0); }
-  }
-  @keyframes introSlideRight{
-    0%{ opacity:0; transform: translateX(8vmin); }
-    100%{ opacity:1; transform: translateX(0); }
-  }
-
-  .menu-home-buttons{
-    display:flex;
-    flex-direction:column;
-    gap: 1.6vmin;
-    width: 100%;
-  }
-  .menu-home-btn{
-    width:100%;
-    background: var(--panel);
-    border: none;
-    border-radius: 1.6vmin;
-    padding: 1.9vmin 2.4vmin;
-    min-height: 48px;
-    box-sizing: border-box;
-    text-align:center;
-    cursor:pointer;
-    font-family: inherit;
-    font-weight: 800;
-    font-size: clamp(14px, 2vmin, 24px);
-    letter-spacing: 0.03em;
-    color: #eee;
-    box-shadow: 0 0.3vmin 1.4vmin rgba(0,0,0,0.4);
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(0.8vmin);
-    transition: opacity 0.35s ease, transform 0.35s cubic-bezier(.2,1,.3,1), background 0.14s ease, color 0.14s ease;
-    touch-action: manipulation;
-  }
-  .menu-home-buttons.show .menu-home-btn{
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-  }
-  .menu-home-buttons.show .menu-home-btn:nth-child(1){ transition-delay: 0s; }
-  .menu-home-buttons.show .menu-home-btn:nth-child(2){ transition-delay: 0.08s; }
-  .menu-home-buttons.show .menu-home-btn:nth-child(3){ transition-delay: 0.16s; }
-  .menu-home-btn:hover{ color: var(--accent); }
-  .menu-home-btn:active{ transform: scale(0.98); }
-
-  .options-empty{
-    color: var(--muted);
-    font-size: 1.7vmin;
-    padding: 3vmin 0;
-    text-align:center;
-  }
-
-  .main-menu-kicker{
-    font-size: 1.5vmin;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 700;
-    text-align: center;
-  }
-  .menu-mode-list{
-    display:flex;
-    flex-direction:column;
-    gap: 1.6vmin;
-    width: 100%;
-  }
-  .menu-mode-option{
-    display:flex;
-    align-items:center;
-    gap: 2vmin;
-    width: 100%;
-    position: relative;
-    background: var(--panel);
-    border: none;
-    border-radius: 2vmin;
-    padding: 2.2vmin 2.4vmin;
-    min-height: 48px;
-    box-sizing: border-box;
-    text-align: left;
-    cursor: pointer;
-    font-family: inherit;
-    color: #eee;
-    box-shadow: 0 0.3vmin 1.4vmin rgba(0,0,0,0.4);
-    transition: transform 0.14s cubic-bezier(.2,1,.3,1), box-shadow 0.14s ease, background 0.14s ease;
-    touch-action: manipulation;
-  }
-  .menu-mode-option:hover{
-    transform: translateY(-0.2vmin);
-    box-shadow: 0 0.6vmin 2vmin rgba(0,0,0,0.5);
-  }
-  .menu-mode-option:active{ transform: scale(0.98); }
-  .menu-mode-option.active{
-    box-shadow: 0 0.3vmin 1.4vmin rgba(0,0,0,0.4);
-  }
-  .menu-mode-option .opt-swatch{
-    position: absolute;
-    left: 2.4vmin;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 5vmin;
-    height: 5vmin;
-    border-radius: 1.3vmin;
-    flex-shrink: 0;
-    background: var(--pos-bg);
-    box-shadow: 0 0 0 1px #2b2b2b inset;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
-    font-weight: 800;
-    font-size: 1.7vmin;
-    color: var(--pos-fg);
-  }
-  .menu-mode-option[data-mode="nnzm"] .opt-swatch{
-    background: var(--neg-bg);
-    box-shadow: 0 0 0 1px #d6d6d6 inset;
-    color: var(--neg-fg);
-  }
-  .menu-mode-option .opt-body{ width: 100%; min-width: 0; text-align: center; }
-  .menu-mode-option .opt-title{
-    font-weight: 800;
-    font-size: 2.4vmin;
-    letter-spacing: 0.01em;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap: 1vmin;
-  }
-  .menu-mode-option .opt-desc{
-    font-size: 1.6vmin;
-    color: var(--muted);
-    margin-top: 0.5vmin;
-    line-height: 1.45;
-  }
-  .main-menu-close{
-    margin-top: 0.4vmin;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-family: inherit;
-    font-size: clamp(13px, 1.7vmin, 20px);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    padding: 1.2vmin 2vmin;
-    min-height: 44px;
-    box-sizing: border-box;
-    transition: color 0.15s ease;
-    touch-action: manipulation;
-  }
-  .main-menu-close:hover{ color: var(--accent); }
   .scores{
     display:flex;
     gap: 1.4vmin;
@@ -461,7 +162,7 @@
     justify-content:center;
     font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
     font-weight: 800;
-    font-size: calc(var(--cellsize) * 0.42);
+    font-size: 6.4vmin;
     transition: left 0.13s cubic-bezier(.4,0,.2,1), top 0.13s cubic-bezier(.4,0,.2,1);
     will-change: left, top, transform;
     z-index: 2;
@@ -476,9 +177,6 @@
     color: var(--neg-fg);
     box-shadow: 0 0 0 1px #d6d6d6 inset;
   }
-  .tile.len3{ font-size: calc(var(--cellsize) * 0.34); }
-  .tile.len4{ font-size: calc(var(--cellsize) * 0.27); }
-  .tile.len5plus{ font-size: calc(var(--cellsize) * 0.21); }
   .tile.spawn{
     animation: spawn 0.22s cubic-bezier(.2,1.4,.4,1) both;
   }
@@ -582,12 +280,9 @@
     justify-content:center;
     font-family: "SF Mono", "JetBrains Mono", "Consolas", monospace;
     font-weight: 800;
-    font-size: calc(var(--cellsize) * 0.68 * 0.42);
+    font-size: 3.7vmin;
     flex-shrink: 0;
   }
-  .preview-tile.len3{ font-size: calc(var(--cellsize) * 0.68 * 0.34); }
-  .preview-tile.len4{ font-size: calc(var(--cellsize) * 0.68 * 0.27); }
-  .preview-tile.len5plus{ font-size: calc(var(--cellsize) * 0.68 * 0.21); }
   .preview-tile.pos{
     background: var(--pos-bg);
     color: var(--pos-fg);
@@ -626,15 +321,13 @@
     border: none;
     border-radius: 1.4vmin;
     padding: 1.4vmin 3.4vmin;
-    min-height: 44px;
     font-family: inherit;
     font-weight: 700;
-    font-size: clamp(13px, 1.9vmin, 22px);
+    font-size: 1.9vmin;
     letter-spacing: 0.04em;
     cursor:pointer;
     box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
     transition: color 0.15s ease, transform 0.1s ease;
-    touch-action: manipulation;
   }
   .restart-btn:hover{
     color: var(--accent);
@@ -676,15 +369,15 @@
 
   /* ---------- Help button ---------- */
   .help-btn{
-    width: clamp(38px, 5.2vmin, 52px);
-    height: clamp(38px, 5.2vmin, 52px);
+    width: 5.2vmin;
+    height: 5.2vmin;
     border-radius: 50%;
     background: var(--panel);
     color: var(--muted);
     border: none;
     font-family: inherit;
     font-weight: 800;
-    font-size: clamp(18px, 2.6vmin, 26px);
+    font-size: 2.6vmin;
     display:flex;
     align-items:center;
     justify-content:center;
@@ -693,7 +386,6 @@
     align-self: center;
     box-shadow: 0 0.3vmin 1vmin rgba(0,0,0,0.4);
     transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
-    touch-action: manipulation;
   }
   .help-btn:active{
     transform: scale(0.92);
@@ -791,106 +483,13 @@
   }
   .footer-hint b{ color:#bbb; }
 
-  /* ---------- Tutorial banner ---------- */
-  .tutorial-banner{
-    width: 100%;
-    background: var(--panel);
-    border-radius: 1.6vmin;
-    padding: 1.8vmin 2.2vmin;
-    box-shadow: 0 0.3vmin 1.4vmin rgba(0,0,0,0.4);
-    display: none;
-    flex-direction: column;
-    gap: 1.2vmin;
-    box-sizing: border-box;
-  }
-  .app.tutorial-active .tutorial-banner{ display:flex; }
-  .app.tutorial-active .menu-btn,
-  .app.tutorial-active .btn-row,
-  .app.tutorial-active .footer-hint{ display:none; }
-  .tutorial-banner-top{
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap: 1.6vmin;
-  }
-  .tutorial-text{
-    font-size: 1.9vmin;
-    line-height: 1.5;
-    color: #eee;
-    flex: 1;
-  }
-  .tutorial-text.hint{
-    color: var(--accent);
-  }
-  .tutorial-step-label{
-    font-size: 1.3vmin;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 700;
-    margin-bottom: 0.3vmin;
-  }
-  .tutorial-skip-btn{
-    flex-shrink: 0;
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-family: inherit;
-    font-weight: 700;
-    font-size: clamp(12px, 1.5vmin, 18px);
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    padding: 0.9vmin 1.2vmin;
-    min-height: 40px;
-    box-sizing: border-box;
-    transition: color 0.15s ease;
-    touch-action: manipulation;
-  }
-  .tutorial-skip-btn:hover{ color: var(--accent); }
-  .tutorial-continue-btn{
-    display:none;
-    background: var(--accent);
-    border: none;
-    border-radius: 1.1vmin;
-    padding: 1.2vmin;
-    min-height: 44px;
-    box-sizing: border-box;
-    color: #1a1206;
-    font-family: inherit;
-    font-weight: 800;
-    font-size: clamp(13px, 1.8vmin, 20px);
-    cursor: pointer;
-    touch-action: manipulation;
-  }
-  .tutorial-banner.show-continue .tutorial-continue-btn{ display:block; }
-
   @media (prefers-reduced-motion: reduce){
     .tile, .overlay, .overlay-inner, .score-value{ transition: none !important; animation: none !important; }
-  }
-
-  /* ---------- Short / landscape phone viewports ---------- */
-  @media (max-height: 480px) and (orientation: landscape){
-    .app{
-      gap: 1.2vmin;
-      padding-top: max(1.2vmin, var(--safe-t));
-      padding-bottom: max(1.2vmin, var(--safe-b));
-    }
-    .title{ font-size: clamp(24px, 6vmin, 48px); }
-    .board-col{ gap: 0.6vmin; }
-    .menu-btn{ margin-top: 0.3vmin; }
-    .footer-hint{ display:none; }
-  }
-
-  /* Avoid iOS "bounce" revealing background beyond the fixed elements */
-  @supports (-webkit-touch-callout: none){
-    .main-menu, .modal-overlay{
-      height: -webkit-fill-available;
-    }
   }
 </style>
 </head>
 <body>
-  <div class="app" id="appRoot">
+  <div class="app">
     <div class="header">
       <div class="scores">
         <div class="score-box">
@@ -901,27 +500,14 @@
           <div class="score-label">Best</div>
           <div class="score-value" id="best">0</div>
         </div>
+        <button class="help-btn" id="helpBtn" aria-label="How to play">?</button>
       </div>
     </div>
 
     <div class="board-col">
         <div class="title" id="titleEl">
             <span class="zero" id="titleZero">Zero</span><span class="sum" id="titleSum">Sum</span>
-        </div>
-
-        <button class="menu-btn" id="menuBtn" aria-haspopup="true">
-            <svg class="hamburger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
-        </button>
-
-        <div class="tutorial-banner" id="tutorialBanner">
-          <div class="tutorial-banner-top">
-            <div>
-              <div class="tutorial-step-label" id="tutorialStepLabel">Tutorial</div>
-              <div class="tutorial-text" id="tutorialText"></div>
-            </div>
-            <button class="tutorial-skip-btn" id="tutorialSkipBtn">Skip</button>
-          </div>
-          <button class="tutorial-continue-btn" id="tutorialContinueBtn">Start Playing</button>
+            <div class="title-sub">Cancel Exact Opposites</div>
         </div>
 
         <div class="board-row">
@@ -942,59 +528,45 @@
     </div>
 
     <div class="btn-row">
-      <button class="restart-btn" id="restartBtn">Restart</button>
-      <button class="restart-btn" id="saveReplayBtn">Save Replay</button>
+      <button class="restart-btn" id="restartBtn">Restart <span class="key-hint">R</span></button>
+      <button class="restart-btn" id="saveReplayBtn">Save Replay <span class="key-hint">.zsr</span></button>
+      <button class="restart-btn" id="aiBtn">AI: Off <span class="key-hint">A</span></button>
     </div>
+
+    <div class="footer-hint">Push exact opposites together to <b>cancel</b> them</div>
+
   </div>
 
-  <div class="main-menu" id="mainMenu">
-    <div class="main-menu-panel">
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <h2>How ZeroSum Works</h2>
+      <p>Swipe (or use arrow keys / WASD) to slide every tile in one direction. Tiles glide until they hit the edge of the 4&times;4 board or another tile.</p>
 
-      <div class="menu-screen active" data-screen="intro" id="screenIntro">
-        <div class="intro-title-row" id="introTitleRow">
-          <span class="intro-letters zero" id="introZero">Zero</span><span class="intro-letters sum" id="introSum">Sum</span>
-        </div>
-        <div class="menu-home-buttons" id="menuHomeButtons">
-          <button class="menu-home-btn" data-action="play">Play</button>
-          <button class="menu-home-btn" data-action="tutorial">Tutorial</button>
-          <button class="menu-home-btn" data-action="options">Options</button>
-        </div>
-      </div>
+      <h3>Tiles</h3>
+      <p><span class="swatch pos">5</span> Black tiles hold <b>positive</b> numbers. <span class="swatch neg">5</span> White tiles hold <b>negative</b> numbers. Every tile is drawn from a shuffled deck of the values &minus;10 through 10 (0 is never dealt on its own), so you'll always see a mix of both colors.</p>
 
-      <div class="menu-screen" data-screen="modes" id="screenModes">
-        <div class="main-menu-kicker">Select Mode</div>
-        <div class="menu-mode-list">
-          <button class="menu-mode-option" data-mode="nnzm">
-            <span class="opt-swatch">0</span>
-            <span class="opt-body">
-              <span class="opt-title">Zero Mode</span>
-            </span>
-          </button>
-          <button class="menu-mode-option" data-mode="zerosum">
-            <span class="opt-swatch">±</span>
-            <span class="opt-body">
-              <span class="opt-title">Sum Mode</span>
-            </span>
-          </button>
-        </div>
-        <button class="main-menu-close" id="modesBackBtn">Back</button>
-      </div>
+      <h3>Cancelling</h3>
+      <p>When a move pushes two tiles together, they interact only if they're <b>exact opposites</b> &mdash; equal magnitude, mismatched color, like <span class="swatch pos">7</span> and <span class="swatch neg">7</span>. That pair cancels out completely and both tiles vanish from the board.</p>
 
-      <div class="menu-screen" data-screen="ingame" id="screenIngame">
-        <div class="main-menu-kicker">Menu</div>
-        <div class="menu-home-buttons show" id="ingameButtons">
-          <button class="menu-home-btn" data-action="resume">Resume</button>
-          <button class="menu-home-btn" data-action="options">Options</button>
-          <button class="menu-home-btn" data-action="mainmenu">Main Menu</button>
-        </div>
-      </div>
+      <h3>Combining</h3>
+      <p>Small tiles are flexible: any <span class="swatch pos">1</span>, <span class="swatch pos">2</span>, or <span class="swatch pos">3</span> (or its negative) can fuse with whatever tile it's pushed into, as long as the result doesn't exceed the current maximum tile value. The two tiles become one tile holding their sum. Any other pairing &mdash; same value, same color, or unrelated numbers above 3 &mdash; just blocks and stacks up without merging.</p>
 
-      <div class="menu-screen" data-screen="options" id="screenOptions">
-        <div class="main-menu-kicker">Options</div>
-        <div class="options-empty">Nothing here yet.</div>
-        <button class="main-menu-close" id="optionsBackBtn">Back</button>
-      </div>
+      <h3>Scoring</h3>
+      <p>Each cancellation scores <b>10&times;</b> the tile's magnitude &mdash; cancelling a pair of 7s scores 70 points. A combine merge instead scores the magnitude of the smaller tile (1, 2, or 3 points).</p>
 
+      <h3>Next Tiles</h3>
+      <p>The column beside the board previews the next few tiles that will be dealt in. Tiles are drawn from a shuffled bag of every value up to the current maximum (starting at &minus;10 to 10, excluding 0); once a bag runs out, a fresh one is shuffled. A dashed line in the preview marks the start of that next bag.</p>
+
+      <h3>Raising the Ceiling</h3>
+      <p>Every 10,000 points raises the maximum tile value by 1. You'll always finish the bag you're currently drawing from before any bigger tiles start appearing &mdash; the wider range only applies to bags shuffled after that.</p>
+
+      <h3>Game Over</h3>
+      <p>After every successful move, one new tile appears in a random empty cell. The game ends when the board is full and no move in any direction would allow a cancellation. Press <b>R</b> or tap Restart any time to start a fresh game.</p>
+
+      <h3>Replays</h3>
+      <p>Tap <b>Save Replay</b> any time to download a compact <code>.zsr</code> replay file of the current game so far. Open it in <code>replay.html</code> to step or scroll through every move.</p>
+
+      <button class="modal-close" id="closeHelp">Got it</button>
     </div>
   </div>
 
@@ -1008,10 +580,6 @@
   // ---------------- Deck system ----------------
   let deck = [];
   let anyBlockGenerated = false;
-  // Tracks the tile-value range used for the most recently shuffled bag, so
-  // we can tell when a bag introduces a brand-new max value (i.e. the range
-  // just grew because a 10,000-point step was crossed).
-  let lastBlockRange = null;
 
   function newShuffledBlock(){
     const range = currentMaxValue();
@@ -1021,26 +589,6 @@
       const j = Math.floor(Math.random()*(i+1));
       [block[i],block[j]] = [block[j],block[i]];
     }
-    // If this bag's range grew from the last bag's, the brand-new extreme
-    // value(s) just got shuffled in like any other tile -- which could put
-    // them right at the front, visible in the "Next" preview immediately.
-    // Instead, pull them back out and drop them somewhere later in this
-    // bag, past the point where the preview window can see them.
-    if(lastBlockRange !== null && range > lastBlockRange){
-      const priorRange = lastBlockRange;
-      const isNew = v => Math.abs(v) > priorRange;
-      const fresh = block.filter(isNew);
-      const rest = block.filter(v => !isNew(v));
-      const minIndex = Math.max(0, QUEUE_PREVIEW_LEN - deck.length);
-      for(const v of fresh){
-        const span = Math.max(0, rest.length - minIndex);
-        const insertAt = Math.min(rest.length, minIndex + Math.floor(Math.random() * (span + 1)));
-        rest.splice(insertAt, 0, v);
-      }
-      block.length = 0;
-      block.push(...rest);
-    }
-    lastBlockRange = range;
     return block.map((v, idx) => ({ value: v, boundary: idx===0 && anyBlockGenerated }));
   }
 
@@ -1206,7 +754,7 @@
       writeQueueEntry(bw, q);
     }
     const payload = bw.finish();
-    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x34]); // "ZSR4" -- same layout as v3 (one queue snapshot at save time); bumped because new-max tiles introduced after a step increase are now hidden deeper in the bag instead of shuffled in visibly
+    const magic = new Uint8Array([0x5A, 0x53, 0x52, 0x33]); // "ZSR3" -- v3 records the queue as it was at save time (once)
     const out = new Uint8Array(magic.length + payload.length);
     out.set(magic, 0);
     out.set(payload, magic.length);
@@ -1226,7 +774,6 @@
   }
 
   function saveReplayFile(){
-    if(tutorialActive) return;
     if(!replayLog) return;
     replayLog.finalQueue = snapshotQueue();
     const bytes = encodeReplay(replayLog);
@@ -1275,16 +822,10 @@
 
   // ---------------- board rendering ----------------
   function cellPixel(){
-    // getComputedStyle on a *custom property* (e.g. --cellsize) returns the
-    // literal specified text ("clamp(46px, 14vmin, 76px)"), not a resolved
-    // pixel value -- parseFloat() on that yields NaN. Standard properties
-    // like width/padding, however, are always resolved to real px by the
-    // browser even when their value chain uses var()/clamp(), so derive the
-    // actual cell size from those instead.
-    const boardStyles = getComputedStyle(boardEl);
-    const gap = parseFloat(boardStyles.paddingLeft) || 0;
-    const totalWidth = parseFloat(boardStyles.width) || 0;
-    const cell = (totalWidth - 5 * gap) / 4;
+    const rootStyles = getComputedStyle(document.documentElement);
+    const vmin = Math.min(window.innerWidth, window.innerHeight) / 100;
+    const cell = parseFloat(rootStyles.getPropertyValue('--cellsize')) * vmin;
+    const gap = parseFloat(rootStyles.getPropertyValue('--gap')) * vmin;
     return {cell, gap};
   }
 
@@ -1307,11 +848,7 @@
   }
 
   function fontSizeClassFor(value){
-    const len = String(Math.abs(value)).length;
-    if(len <= 2) return '';
-    if(len === 3) return 'len3';
-    if(len === 4) return 'len4';
-    return 'len5plus';
+    return '';
   }
 
   function createTileEl(tile, skipAnim){
@@ -1381,7 +918,6 @@
   function renderPreview(){
     const queuePreviews = 5;
     if(!previewPanelEl) return;
-    if(tutorialActive && !tutorialShowPreview){ previewPanelEl.innerHTML = ''; return; }
     ensureDeck(queuePreviews);
     previewPanelEl.innerHTML = '';
     for(let i=0;i<queuePreviews;i++){
@@ -1393,7 +929,7 @@
         previewPanelEl.appendChild(div);
       }
       const el = document.createElement('div');
-      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg') + ' ' + fontSizeClassFor(entry.value);
+      el.className = 'preview-tile ' + (entry.value > 0 ? 'pos' : 'neg');
       el.textContent = Math.abs(entry.value);
       previewPanelEl.appendChild(el);
     }
@@ -1401,7 +937,6 @@
 
   // ---------------- persistence ----------------
   function saveState(){
-    if(tutorialActive) return;
     try{
       const data = {
         v: 2,
@@ -1410,7 +945,6 @@
         best: best,
         deck: deck,
         anyBlockGenerated: anyBlockGenerated,
-        lastBlockRange: lastBlockRange,
         tileIdCounter: tileIdCounter,
         gameOver: gameOver,
         replayLog: replayLog
@@ -1443,10 +977,6 @@
     best = Math.max(best, data.best || 0);
     deck = data.deck.slice();
     anyBlockGenerated = !!data.anyBlockGenerated;
-    // The loaded deck already reflects whatever range it was shuffled at;
-    // treat that as the current baseline so we don't re-trigger the
-    // hide-the-new-max-tile logic for a step that was already crossed.
-    lastBlockRange = (typeof data.lastBlockRange === 'number') ? data.lastBlockRange : currentMaxValue();
     tileIdCounter = data.tileIdCounter || (tiles.reduce((m,t)=>Math.max(m,t.id),0) + 1);
     gameOver = !!data.gameOver;
     busy = false;
@@ -1572,7 +1102,6 @@
     overlayEl.classList.remove('flash');
     deck = [];
     anyBlockGenerated = false;
-    lastBlockRange = null;
     buildCellBackgrounds();
     resetReplayLog();
 
@@ -1617,7 +1146,6 @@
       // Reject this opening and restore the deck.
       deck = [];
       anyBlockGenerated = false;
-      lastBlockRange = null;
   }
 
     tiles.forEach(t => createTileEl(t));
@@ -1702,18 +1230,12 @@
     return ['left','right','up','down'].some(dir => simulateMoved(values.slice(), dir));
   }
 
-  // ---------------- shared slide/merge core ----------------
-  // Performs the slide + cancel/combine resolution for one direction against
-  // the live `tiles` array (updating each tile's r/c and value in place),
-  // but does NOT touch score, spawn a new tile, or persist state -- callers
-  // decide what to do with the result. Returns:
-  //   { moved, scoreGain, removedIds:Set, combinedIds:Set, cancelledCount }
-  function performSlide(dir){
+  // ---------------- real move (with tile objects) ----------------
+  function doMove(dir){
+    if(busy) return;
     const lines = getLineCoords(dir);
     let moved = false;
     let scoreGain = 0;
-    let cancelledCount = 0;
-    let blockedAttempted = false;
     const removedIds = new Set();
     const combinedIds = new Set();
 
@@ -1727,31 +1249,25 @@
           lineTiles[i] = lineTiles[i+1];
           lineTiles[i+1] = null;
           moved = true;
-          } else if(!mergedInto[i]){
-            const a = lineTiles[i], b = lineTiles[i+1];
-            const result = evaluateMerge(a.value, b.value);
-
-            if(!result){
-                blockedAttempted = true;
+        } else if(!mergedInto[i]){
+          const a = lineTiles[i], b = lineTiles[i+1];
+          const result = evaluateMerge(a.value, b.value);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              removedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i] = null;
+              lineTiles[i+1] = null;
             } else {
-                scoreGain += result.scoreGain;
-
-                if(result.type === 'cancel'){
-                    removedIds.add(a.id);
-                    removedIds.add(b.id);
-                    cancelledCount++;
-                    lineTiles[i] = null;
-                    lineTiles[i+1] = null;
-                } else {
-                    a.value = result.value;
-                    combinedIds.add(a.id);
-                    removedIds.add(b.id);
-                    lineTiles[i+1] = null;
-                }
-
-                mergedInto[i] = true;
-                moved = true;
+              a.value = result.value;
+              combinedIds.add(a.id);
+              removedIds.add(b.id);
+              lineTiles[i+1] = null;
             }
+            mergedInto[i] = true;
+            moved = true;
+          }
         }
       }
 
@@ -1762,7 +1278,7 @@
       }
     }
 
-    if(!moved) return { moved:false, scoreGain:0, removedIds, combinedIds, cancelledCount:0, blockedAttempted };
+    if(!moved) return false;
 
     tiles.forEach(t => {
       if(removedIds.has(t.id)) return;
@@ -1775,18 +1291,6 @@
     });
     tiles = tiles.filter(t => !removedIds.has(t.id));
 
-    return { moved:true, scoreGain, removedIds, combinedIds, cancelledCount };
-  }
-
-  // ---------------- real move (with tile objects) ----------------
-  function doMove(dir){
-    if(busy) return;
-    if(tutorialActive) return tutorialDoMove(dir);
-
-    const result = performSlide(dir);
-    if(!result.moved) return false;
-
-    let scoreGain = result.scoreGain;
     const zeroCleared = tiles.length === 0;
     if(zeroCleared) scoreGain += ZERO_CLEAR_BONUS;
 
@@ -1823,253 +1327,6 @@
     boardEl.classList.add('shake');
   }
 
-  // ================= INTERACTIVE TUTORIAL =================
-  let tutorialActive = false;
-  let tutorialMode = null;
-  let tutorialSteps = [];
-  let tutorialStep = 0;
-  let tutorialAwaitingNext = false; // true whenever the Next/Start Playing button is showing and moves should be ignored
-  let tutorialShowPreview = false;  // true only during the "next queue" info step
-
-  const tutorialBannerEl = document.getElementById('tutorialBanner');
-  const tutorialTextEl = document.getElementById('tutorialText');
-  const tutorialStepLabelEl = document.getElementById('tutorialStepLabel');
-  const tutorialSkipBtn = document.getElementById('tutorialSkipBtn');
-  const tutorialContinueBtn = document.getElementById('tutorialContinueBtn');
-
-  // Returns true if any two tiles currently on the board sit in adjacent
-  // cells (same row or column, one apart) and share the same value -- i.e.
-  // they tried to interact but neither cancelled (not opposites) nor
-  // combined (combining disabled), so they're just blocking each other.
-  function boardHasBlockedAdjacentPair(){
-    for(let i=0;i<tiles.length;i++){
-      for(let j=i+1;j<tiles.length;j++){
-        const a = tiles[i], b = tiles[j];
-        const adjacent = (a.r===b.r && Math.abs(a.c-b.c)===1) || (a.c===b.c && Math.abs(a.r-b.r)===1);
-        if(adjacent && a.value===b.value) return true;
-      }
-    }
-    return false;
-  }
-
-  function moveStep(label, text, setup, validate, successText){
-    return { type:'move', label, text, setup, validate, successText };
-  }
-  function infoStep(label, text, opts){
-    return Object.assign({ type:'info', label, text, setup: [] }, opts||{});
-  }
-
-  function getTutorialSteps(m){
-    const steps = [];
-
-    steps.push(moveStep(
-      'Movement',
-      'Swipe, or press an arrow key / WASD, to slide every tile on the board in that direction. Try it now \u2014 slide any direction to move this tile.',
-      [{ r:1, c:1, value:5 }],
-      () => true,
-      'That\'s it! Tiles shift one space at a time toward the wall or the next tile in their path.'
-    ));
-
-    steps.push(moveStep(
-      'Cancelling: Horizontal',
-      'Two tiles cancel each other out only when they\'re exact opposites \u2014 same number, opposite color. Slide LEFT or RIGHT to walk these two into each other.',
-      [{ r:1, c:0, value:5 }, { r:1, c:3, value:-5 }],
-      (result) => result.cancelledCount > 0,
-      'Cancelled! Opposite pairs vanish and score 10\u00d7 their number.'
-    ));
-
-    steps.push(moveStep(
-      'Cancelling: Vertical',
-      'Cancelling works the same way up and down. Slide UP or DOWN to bring these two opposites together.',
-      [{ r:0, c:2, value:-8 }, { r:3, c:2, value:8 }],
-      (result) => result.cancelledCount > 0,
-      'Nice \u2014 same rule on any axis: exact opposites cancel.'
-    ));
-
-    steps.push(moveStep(
-      'Cancelling: Diagonal',
-      'Tiles don\'t have to start in the same row or column. Use a mix of moves \u2014 for example UP then LEFT \u2014 to line these two opposites up and cancel them.',
-      [{ r:0, c:0, value:4 }, { r:2, c:2, value:-4 }],
-      (result) => result.cancelledCount > 0,
-      'You lined them up across two directions and they still cancelled.'
-    ));
-
-    if(m === 'zerosum'){
-      steps.push(moveStep(
-        'Non-zero Merging: Horizontal',
-        'Small tiles (\u00b11, \u00b12, or \u00b13) are flexible \u2014 A long as their sum don\'t exceed the maximum tile value (initially 10), they fuse with instead of only cancelling exact opposites. Slide LEFT or RIGHT to combine these.',
-        [{ r:1, c:0, value:7 }, { r:1, c:3, value:-2 }],
-        (result) => result.combinedIds.size > 0,
-        'Combined into a 5! Merging ignores color \u2014 only cancelling needs opposite colors.'
-      ));
-
-      steps.push(moveStep(
-        'Non-zero Merging: Vertical',
-        'Merging works vertically too, and still doesn\'t care about color. Slide UP or DOWN to combine these.',
-        [{ r:0, c:2, value:-6 }, { r:3, c:2, value:2 }],
-        (result) => result.combinedIds.size > 0,
-        'Merged into a -4. Same rule, any axis, any color pairing.'
-      ));
-
-      steps.push(moveStep(
-        'Non-zero Merging: Diagonal',
-        'And just like cancelling, merging works across two directions too \u2014 with mismatched colors, same as here. Try DOWN then LEFT (or any combination) to combine these.',
-        [{ r:0, c:0, value:5 }, { r:2, c:2, value:-3 }],
-        (result) => result.combinedIds.size > 0,
-        'Merged across both axes into a 2, black and white alike.'
-      ));
-    } else {
-      steps.push(moveStep(
-        'No Non-zero Merging',
-        'In this mode, tiles ONLY interact by exact cancellation \u2014 there\'s no combining. Slide LEFT and watch: two matching tiles that aren\'t opposites just stack up and block instead of merging.',
-        [{ r:1, c:0, value:3 }, { r:1, c:3, value:3 }],
-        (result) => result.blockedAttempted,
-        'Right \u2014 they just block each other. Only exact opposites ever clear tiles here.'
-      ));
-    }
-
-    steps.push(infoStep(
-      'Next Queue',
-      'One more thing: this panel previews the upcoming tiles before they\'re dealt in. A dashed line marks where a fresh shuffled batch begins.',
-      { showQueue: true }
-    ));
-
-    return steps;
-  }
-
-  function showTutorialMessage(text, isHint){
-    tutorialTextEl.textContent = text;
-    tutorialTextEl.classList.toggle('hint', !!isHint);
-  }
-
-  function showContinueButton(label, handler){
-    tutorialContinueBtn.textContent = label;
-    tutorialContinueBtn.onclick = handler;
-    tutorialBannerEl.classList.add('show-continue');
-    tutorialAwaitingNext = true;
-  }
-
-  function hideContinueButton(){
-    tutorialBannerEl.classList.remove('show-continue');
-    tutorialContinueBtn.onclick = null;
-    tutorialAwaitingNext = false;
-  }
-
-  function setupTutorialStep(idx){
-    hideContinueButton();
-    tutorialShowPreview = false;
-    renderPreview();
-    const step = tutorialSteps[idx];
-    if(!step) return;
-    boardEl.innerHTML = '';
-    tiles = [];
-    score = 0;
-    busy = false;
-    gameOver = false;
-    overlayEl.classList.remove('flash');
-    buildCellBackgrounds();
-    step.setup.forEach(s => {
-      const t = { id: tileIdCounter++, value: s.value, r: s.r, c: s.c, el: null };
-      tiles.push(t);
-      createTileEl(t, true);
-    });
-    renderScores();
-    tutorialStepLabelEl.textContent = 'Tutorial \u00b7 Step ' + (idx+1) + ' of ' + (tutorialSteps.length + 1) + ' \u2014 ' + step.label;
-    showTutorialMessage(step.text);
-
-    if(step.type === 'info'){
-      if(step.showQueue){
-        tutorialShowPreview = true;
-        deck = [
-          { value: 3, boundary: false },
-          { value: -7, boundary: false },
-          { value: 1, boundary: false },
-          { value: -10, boundary: true },
-          { value: 6, boundary: false }
-        ];
-        renderPreview();
-      }
-      showContinueButton('Next', () => advanceTutorialStep());
-    }
-  }
-
-  function advanceTutorialStep(){
-    tutorialStep++;
-    if(tutorialStep >= tutorialSteps.length){
-      showTutorialFinalStep();
-      return;
-    }
-    setupTutorialStep(tutorialStep);
-  }
-
-  function showTutorialFinalStep(){
-    hideContinueButton();
-    tutorialShowPreview = false;
-    boardEl.innerHTML = '';
-    tiles = [];
-    buildCellBackgrounds();
-    tutorialStepLabelEl.textContent = 'Tutorial \u00b7 Step ' + (tutorialSteps.length+1) + ' of ' + (tutorialSteps.length+1);
-    showTutorialMessage('You\'ve got it! Ready to play for real?');
-    showContinueButton('Start Playing', () => endTutorial(true));
-  }
-
-  function tutorialDoMove(dir){
-    if(busy || tutorialAwaitingNext) return false;
-    const step = tutorialSteps[tutorialStep];
-    if(!step || step.type !== 'move') return false;
-    const result = performSlide(dir);
-    if(!result.moved && !result.blockedAttempted){
-        shakeBoard();
-        return false;
-    }
-    const success = step.validate(result, dir);
-    if(success){
-      showTutorialMessage(step.successText);
-      showContinueButton('Next', () => advanceTutorialStep());
-    } else {
-      // Move made progress (tiles shift one space at a time) but hasn't
-      // completed the lesson yet -- leave the board as-is so further
-      // presses keep building on it, rather than snapping back to start.
-      showTutorialMessage(step.text);
-    }
-    return true;
-  }
-
-  function startTutorial(m){
-    // If a real game is currently in progress, flush its latest state to
-    // its own mode-specific save slot before we reassign `mode` and start
-    // the tutorial -- otherwise this mode's save would only reflect
-    // whatever was captured by its last move.
-    if(gameStarted && !tutorialActive) saveState();
-    tutorialActive = true;
-    tutorialMode = m;
-    tutorialSteps = getTutorialSteps(m);
-    tutorialStep = 0;
-    mode = m;
-    try{ localStorage.setItem(MODE_KEY, mode); }catch(e){}
-    applyModeVisuals();
-    if(appRoot) appRoot.classList.add('started', 'tutorial-active');
-    closeMainMenu();
-    busy = false;
-    setupTutorialStep(0);
-  }
-
-  function endTutorial(startRealGame){
-    tutorialActive = false;
-    hideContinueButton();
-    tutorialShowPreview = false;
-    if(appRoot) appRoot.classList.remove('tutorial-active');
-    if(startRealGame){
-      try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
-      if(!loadState()) newGame();
-    }
-  }
-
-  if(tutorialSkipBtn){
-    tutorialSkipBtn.addEventListener('click', () => endTutorial(true));
-  }
-  // ================= END INTERACTIVE TUTORIAL =================
-
   // ---------------- input ----------------
   const KEY_DIR = {
     ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
@@ -2078,8 +1335,7 @@
   window.addEventListener('keydown', (e) => {
     if(e.key === 'r' || e.key === 'R'){
       e.preventDefault();
-      if(tutorialActive){ setupTutorialStep(tutorialStep); }
-      else newGame();
+      newGame();
       return;
     }
     const dir = KEY_DIR[e.key];
@@ -2102,7 +1358,7 @@
     const dy = t.clientY - touchStart.y;
     touchStart = null;
     if(Math.abs(dx) < 24 && Math.abs(dy) < 24){
-      if(gameOver && !tutorialActive) newGame();
+      if(gameOver) newGame();
       return;
     }
     if(gameOver) return;
@@ -2122,11 +1378,6 @@
   });
 
   window.addEventListener('beforeunload', saveState);
-  // beforeunload frequently never fires on mobile browsers (iOS Safari in
-  // particular, when a tab is closed or the app is backgrounded/swiped
-  // away). pagehide and visibilitychange are the reliable signals there,
-  // so both save the current mode's progress too.
-  window.addEventListener('pagehide', saveState);
   document.addEventListener('visibilitychange', () => {
     if(document.visibilityState === 'hidden') saveState();
   });
@@ -2143,172 +1394,194 @@
 
   // ---------------- restart / replay buttons ----------------
   const restartBtn = document.getElementById('restartBtn');
-  if(restartBtn) restartBtn.addEventListener('click', () => newGame());
+  if(restartBtn) restartBtn.addEventListener('click', () => { stopAiIfRunning(); newGame(); });
+  function stopAiIfRunning(){ if(typeof stopAi === 'function') stopAi(); }
 
   const saveReplayBtn = document.getElementById('saveReplayBtn');
   if(saveReplayBtn) saveReplayBtn.addEventListener('click', () => saveReplayFile());
 
-  // ---------------- merge-mode toggle & main menu ----------------
-  const menuBtn = document.getElementById('menuBtn');
-  const mainMenu = document.getElementById('mainMenu');
-  const introTitleRow = document.getElementById('introTitleRow');
-  const menuHomeButtons = document.getElementById('menuHomeButtons');
-  const menuScreens = mainMenu ? Array.from(mainMenu.querySelectorAll('.menu-screen')) : [];
-  const modesBackBtn = document.getElementById('modesBackBtn');
-  const optionsBackBtn = document.getElementById('optionsBackBtn');
-  const ingameButtons = document.getElementById('ingameButtons');
-  const menuModeOptions = mainMenu ? Array.from(mainMenu.querySelectorAll('.menu-mode-option')) : [];
+  // =====================================================================
+  // ---------------- AI (Monte Carlo rollout, NOT expectimax) ----------
+  // =====================================================================
+  //
+  // This deliberately avoids expectimax. Instead of building an exact
+  // probability-weighted game tree (player move -> max, then every possible
+  // tile spawn -> weighted average, recursed to some depth), it plays out
+  // many random simulated futures from each candidate move and averages
+  // the outcome. This is "flat" Monte Carlo rollout evaluation: cheap,
+  // approximate, and doesn't require knowing/enumerating exact spawn
+  // probabilities or doing minimax-style backup.
 
+  const AI_ROLLOUTS = 500;      // random playouts per candidate move
+  const AI_DEPTH = 5;         // random plies per playout
+  const AI_STEP_MS = 0;     // real-move cadence while auto-playing
+
+  // Simulate one move on a plain values[] array (mirrors doMove's merge
+  // logic, including cancel + combine, but without touching DOM/tile ids).
+  function simulateMoveValues(values, dir){
+    const lines = getLineCoords(dir);
+    const board = values.slice();
+    let moved = false;
+    let scoreGain = 0;
+
+    for(const line of lines){
+      const arr = line.map(p => board[p.r*SIZE+p.c]);
+      const mergedInto = new Array(arr.length).fill(false);
+      for(let i=0;i<arr.length-1;i++){
+        if(arr[i+1]===null || arr[i+1]===undefined) continue;
+        if(arr[i]===null || arr[i]===undefined){
+          arr[i] = arr[i+1]; arr[i+1] = null; moved = true;
+        } else if(!mergedInto[i]){
+          const result = evaluateMerge(arr[i], arr[i+1]);
+          if(result){
+            scoreGain += result.scoreGain;
+            if(result.type === 'cancel'){
+              arr[i] = null; arr[i+1] = null;
+            } else {
+              arr[i] = result.value; arr[i+1] = null;
+            }
+            mergedInto[i] = true;
+            moved = true;
+          }
+        }
+      }
+      for(let i=0;i<line.length;i++){
+        const p = line[i];
+        board[p.r*SIZE+p.c] = arr[i];
+      }
+    }
+    return { board, moved, scoreGain };
+  }
+
+  function validDirs(values){
+    return ['left','right','up','down'].filter(d => simulateMoved(values.slice(), d));
+  }
+
+  // Rough stand-in for the deck's distribution: a uniform random nonzero
+  // integer in [-range, range]. Doesn't need to match the real deck exactly,
+  // it only has to be a plausible future for rollout purposes.
+  function randomSpawnValue(range){
+    let v = 0;
+    while(v === 0) v = Math.floor(Math.random()*(2*range+1)) - range;
+    return v;
+  }
+
+  function applyRandomSpawn(board){
+    const empties = [];
+    for(let i=0;i<board.length;i++) if(board[i]===null || board[i]===undefined) empties.push(i);
+    if(empties.length === 0) return board;
+    const idx = empties[Math.floor(Math.random()*empties.length)];
+    board[idx] = randomSpawnValue(currentMaxValue());
+    return board;
+  }
+
+  // Cheap board heuristic used only to break ties / guide rollouts that
+  // don't score much: reward empty space and having tiles whose neighbors
+  // could cancel with them; mildly penalize board clutter.
+  function heuristicValue(board){
+    let empties = 0, cluttPenalty = 0, cancelBonus = 0;
+    for(let r=0;r<SIZE;r++){
+      for(let c=0;c<SIZE;c++){
+        const v = board[r*SIZE+c];
+        if(v===null || v===undefined){ empties++; continue; }
+        cluttPenalty += Math.abs(v);
+        if(c+1<SIZE){
+          const v2 = board[r*SIZE+c+1];
+          if(v2!==null && v2!==undefined && v+v2===0) cancelBonus++;
+        }
+        if(r+1<SIZE){
+          const v2 = board[(r+1)*SIZE+c];
+          if(v2!==null && v2!==undefined && v+v2===0) cancelBonus++;
+        }
+      }
+    }
+    return empties*40 + cancelBonus*60 - cluttPenalty*1;
+  }
+
+  // Play out a random future from `board` for up to AI_DEPTH plies, picking
+  // a uniformly random legal direction at each step (no lookahead, no
+  // probability weighting) and a random tile spawn after each move.
+  function randomRollout(board){
+    let cur = board.slice();
+    let total = 0;
+    for(let d=0; d<AI_DEPTH; d++){
+      const dirs = validDirs(cur);
+      if(dirs.length === 0) { total -= 500; break; } // dead end, penalize
+      const dir = dirs[Math.floor(Math.random()*dirs.length)];
+      const { board: next, scoreGain } = simulateMoveValues(cur, dir);
+      total += scoreGain;
+      cur = applyRandomSpawn(next);
+    }
+    total += heuristicValue(cur) * 0.1;
+    return total;
+  }
+
+  // Pick the move whose average simulated future looks best. This is the
+  // Monte Carlo alternative to expectimax: no exact expectation over spawn
+  // probabilities, no adversarial minimizing "chance" ply -- just sampled
+  // random continuations, averaged.
+  function chooseAiMove(){
+    const values = boardValues();
+    const dirs = validDirs(values);
+    if(dirs.length === 0) return null;
+
+    let bestDir = null, bestScore = -Infinity;
+    for(const dir of dirs){
+      const { board: afterMove, scoreGain } = simulateMoveValues(values, dir);
+      let total = 0;
+      for(let i=0;i<AI_ROLLOUTS;i++){
+        const withSpawn = applyRandomSpawn(afterMove.slice());
+        total += scoreGain + randomRollout(withSpawn);
+      }
+      const avg = total / AI_ROLLOUTS;
+      if(avg > bestScore){ bestScore = avg; bestDir = dir; }
+    }
+    return bestDir;
+  }
+
+  let aiTimer = null;
+  const aiBtn = document.getElementById('aiBtn');
+
+  function aiStep(){
+    if(gameOver){ stopAi(); return; }
+    if(busy) return;
+    const dir = chooseAiMove();
+    if(!dir){ stopAi(); return; }
+    doMove(dir);
+  }
+
+  function startAi(){
+    if(aiTimer) return;
+    aiTimer = setInterval(aiStep, AI_STEP_MS);
+    if(aiBtn) aiBtn.innerHTML = 'AI: On <span class="key-hint">A</span>';
+  }
+
+  function stopAi(){
+    if(aiTimer){ clearInterval(aiTimer); aiTimer = null; }
+    if(aiBtn) aiBtn.innerHTML = 'AI: Off <span class="key-hint">A</span>';
+  }
+
+  function toggleAi(){
+    if(aiTimer) stopAi(); else startAi();
+  }
+
+  if(aiBtn) aiBtn.addEventListener('click', toggleAi);
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 'a' || e.key === 'A'){
+      e.preventDefault();
+      toggleAi();
+    }
+  });
+
+  // ---------------- merge-mode toggle ----------------
   function applyModeVisuals(){
     if(titleEl) titleEl.classList.toggle('nnzm', mode === 'nnzm');
-    if(menuBtn) menuBtn.classList.toggle('nnzm', mode === 'nnzm');
-    menuModeOptions.forEach(opt => {
-      opt.classList.toggle('active', opt.dataset.mode === mode);
-    });
   }
-
-  let wasBusyBeforeMenu = false;
-  let gameStarted = false;
-  let pendingAction = 'play';
-  let introPlayed = false;
-  const appRoot = document.getElementById('appRoot');
-
-  function showScreen(name){
-    menuScreens.forEach(s => {
-      const isTarget = s.dataset.screen === name;
-      s.classList.toggle('active', isTarget);
-      s.classList.toggle('shown', false);
-    });
-    requestAnimationFrame(() => {
-      menuScreens.forEach(s => {
-        if(s.dataset.screen === name) s.classList.add('shown');
-      });
-    });
-    if(name === 'modes' && modesBackBtn){
-      modesBackBtn.textContent = 'Back';
-    }
-  }
-
-  function playIntroSequence(){
-    if(introPlayed) return;
-    introPlayed = true;
-    if(introTitleRow) introTitleRow.classList.remove('settled');
-    setTimeout(() => {
-      if(introTitleRow) introTitleRow.classList.add('raise');
-    }, 2450);
-    setTimeout(() => {
-      if(menuHomeButtons) menuHomeButtons.classList.add('show');
-      if(introTitleRow) introTitleRow.classList.add('settled');
-    }, 3050);
-  }
-
-  function showHomeSettled(){
-    // Show the intro screen already in its final state (no re-animation)
-    if(introTitleRow){
-      introTitleRow.classList.add('raise', 'settled');
-    }
-    if(menuHomeButtons) menuHomeButtons.classList.add('show');
-  }
-
-  function openMainMenu(){
-    if(!mainMenu) return;
-    wasBusyBeforeMenu = busy;
-    busy = true;
-    mainMenu.classList.add('open');
-    if(gameStarted){
-      showScreen('ingame');
-    } else {
-      showScreen('intro');
-      if(!introPlayed) playIntroSequence();
-      else showHomeSettled();
-    }
-  }
-  function closeMainMenu(){
-    if(!mainMenu) return;
-    mainMenu.classList.remove('open');
-    busy = wasBusyBeforeMenu;
-  }
-  if(menuBtn){
-    menuBtn.addEventListener('click', () => openMainMenu());
-  }
-  if(menuHomeButtons){
-    menuHomeButtons.addEventListener('click', (e) => {
-      const btn = e.target.closest('.menu-home-btn');
-      if(!btn) return;
-      const action = btn.dataset.action;
-      if(action === 'options'){
-        showScreen('options');
-      } else {
-        pendingAction = action; // 'play' or 'tutorial'
-        showScreen('modes');
-      }
-    });
-  }
-  if(ingameButtons){
-    ingameButtons.addEventListener('click', (e) => {
-      const btn = e.target.closest('.menu-home-btn');
-      if(!btn) return;
-      const action = btn.dataset.action;
-      if(action === 'resume'){
-        closeMainMenu();
-      } else if(action === 'options'){
-        showScreen('options');
-      } else if(action === 'mainmenu'){
-        showScreen('intro');
-        showHomeSettled();
-      }
-    });
-  }
-  if(modesBackBtn){
-    modesBackBtn.addEventListener('click', () => {
-      showScreen(gameStarted ? 'ingame' : 'intro');
-    });
-  }
-  if(optionsBackBtn){
-    optionsBackBtn.addEventListener('click', () => showScreen(gameStarted ? 'ingame' : 'intro'));
-  }
-  menuModeOptions.forEach(opt => {
-    opt.addEventListener('click', () => {
-      const chosen = opt.dataset.mode;
-      const firstLaunch = !gameStarted;
-      const action = pendingAction;
-      gameStarted = true;
-      if(firstLaunch){
-        if(action === 'tutorial'){
-          startTutorial(chosen);
-        } else {
-          mode = chosen;
-          try{ localStorage.setItem(MODE_KEY, mode); }catch(e){}
-          applyModeVisuals();
-          try{ best = parseInt(localStorage.getItem(bestKeyFor(mode))||'0',10) || 0; }catch(e){ best = 0; }
-          if(!loadState()) newGame();
-          if(appRoot) appRoot.classList.add('started');
-          closeMainMenu();
-          busy = false;
-        }
-      } else {
-        closeMainMenu();
-        if(action === 'tutorial'){
-          startTutorial(chosen);
-        } else {
-          switchMode(chosen);
-        }
-      }
-    });
-  });
-  document.addEventListener('keydown', (e) => {
-    if(e.key === 'Escape' && gameStarted && mainMenu && mainMenu.classList.contains('open')) closeMainMenu();
-  });
 
   function switchMode(newMode){
     if(newMode === mode || modeSwitching) return;
     modeSwitching = true;
     busy = true;
-
-    // Persist the mode we're leaving under its own save key before
-    // switching -- `saveState()` always writes to whatever mode is
-    // currently active, so this must happen before `mode` changes.
-    if(gameStarted) saveState();
 
     mode = newMode;
     try{ localStorage.setItem(MODE_KEY, mode); }catch(e){}
@@ -2335,8 +1608,17 @@
     }, outDelay);
   }
 
+  const titleZeroEl = document.getElementById('titleZero');
+  const titleSumEl = document.getElementById('titleSum');
+  if(titleZeroEl){
+    titleZeroEl.addEventListener('click', () => switchMode('nnzm'));
+  }
+  if(titleSumEl){
+    titleSumEl.addEventListener('click', () => switchMode('zerosum'));
+  }
+
   applyModeVisuals();
-  openMainMenu();
+  if(!loadState()) newGame();
 
   // ---------------- debug hook (remove before shipping) ----------------
   window.debug = {
